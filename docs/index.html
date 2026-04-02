@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -19,14 +19,45 @@
   --text:      #e8e8e8;
   --text2:     #888;
   --text3:     #555;
-  --accent:    #c8ff00;
-  --accent2:   #7c4dff;
+  --accent:    #FABE64;
+  --accent2:   #FA8B64;
+  --accent3:   #65E9FA;
+  --accent-bg: rgba(250,190,100,0.10);
   --danger:    rgba(220,50,50,0.15);
   --danger-border: rgba(220,50,50,0.3);
   --danger-text: #f77;
   --sidebar:   280px;
   --toolbar:   52px;
   --radius:    6px;
+  --dot:       rgba(255,255,255,0.06);
+  --hover-bg:  rgba(255,255,255,0.07);
+  --hover-border: rgba(255,255,255,0.22);
+  --canvas-area-bg: #1e1e1e;
+  --canvas-outline: rgba(255,255,255,0.12);
+}
+
+[data-theme="light"] {
+  --bg:        #ebebeb;
+  --panel:     #f5f5f5;
+  --panel2:    #ebebeb;
+  --panel3:    #e0e0e0;
+  --border:    rgba(0,0,0,0.07);
+  --border2:   rgba(0,0,0,0.25);
+  --text:      #1a1a1a;
+  --text2:     #666;
+  --text3:     #aaa;
+  --accent:    #c47a1a;
+  --accent2:   #c45a30;
+  --accent3:   #0aabcc;
+  --accent-bg: rgba(196,122,26,0.10);
+  --danger:    rgba(180,30,30,0.1);
+  --danger-border: rgba(180,30,30,0.25);
+  --danger-text: #c00;
+  --dot:       rgba(0,0,0,0.07);
+  --hover-bg:  rgba(0,0,0,0.05);
+  --hover-border: rgba(0,0,0,0.28);
+  --canvas-area-bg: #ebebeb;
+  --canvas-outline: rgba(0,0,0,0.12);
 }
 
 html, body {
@@ -121,12 +152,12 @@ body {
   gap: 5px;
   flex-shrink: 0;
 }
-.tb-btn:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.22); }
+.tb-btn:hover { background: var(--hover-bg); border-color: var(--hover-border); }
 .tb-btn.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
-.tb-btn.primary:hover { background: #d4ff33; }
+.tb-btn.primary:hover { background: #fccb7e; }
 .tb-btn.danger { background: var(--danger); border-color: var(--danger-border); color: var(--danger-text); }
-.tb-btn.purple { border-color: rgba(124,77,255,0.4); color: #b39ddb; }
-.tb-btn.purple:hover { background: rgba(124,77,255,0.1); border-color: rgba(124,77,255,0.6); }
+.tb-btn.purple { border-color: rgba(250,139,100,0.4); color: #fbb49a; }
+.tb-btn.purple:hover { background: rgba(250,139,100,0.1); border-color: rgba(250,139,100,0.6); }
 
 #slide-count {
   font-size: 11px;
@@ -184,7 +215,7 @@ body {
   line-height: 1;
   transition: all 0.15s;
 }
-.add-slide-btn:hover { background: rgba(200,255,0,0.1); border-color: var(--accent); color: var(--accent); }
+.add-slide-btn:hover { background: rgba(250,190,100,0.1); border-color: var(--accent); color: var(--accent); }
 
 #slides-list {
   flex: 1;
@@ -206,7 +237,7 @@ body {
   aspect-ratio: 1 / 1;
   background: #111;
 }
-.slide-thumb:hover { border-color: rgba(255,255,255,0.2); }
+.slide-thumb:hover { border-color: var(--hover-border); }
 .slide-thumb.active { border-color: var(--accent); }
 .slide-thumb.selected { border-color: #4a9eff; background: rgba(74,158,255,0.1); }
 .slide-thumb.drag-over { border-color: var(--accent); border-style: dashed; opacity: 0.7; }
@@ -238,7 +269,9 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: repeating-conic-gradient(#1a1a1a 0% 25%, #171717 0% 50%) 0 0 / 22px 22px;
+  background-color: var(--canvas-area-bg);
+  background-image: radial-gradient(circle, var(--dot) 1px, transparent 1px);
+  background-size: 20px 20px;
   overflow: hidden;
   position: relative;
   padding: 16px 24px 12px;
@@ -266,8 +299,8 @@ body {
   transition: all 0.15s;
   white-space: nowrap;
 }
-.size-btn:hover { border-color: rgba(255,255,255,0.22); color: var(--text); }
-.size-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(200,255,0,0.07); }
+.size-btn:hover { border-color: var(--border2); color: var(--text); }
+.size-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
 
 .sz-icon {
   display: inline-block;
@@ -286,6 +319,7 @@ body {
   box-shadow: 0 20px 70px rgba(0,0,0,0.65);
   border-radius: 3px;
   overflow: hidden;
+  outline: 1px solid var(--canvas-outline);
   flex-shrink: 0;
 }
 #main-canvas { display: block; }
@@ -359,7 +393,7 @@ input[type=text], input[type=number], textarea, select {
   width: 100%;
 }
 input[type=text]:focus, input[type=number]:focus, textarea:focus, select:focus {
-  border-color: rgba(200,255,0,0.4);
+  border-color: rgba(250,190,100,0.5);
 }
 textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
 select option { background: var(--panel2); }
@@ -402,7 +436,7 @@ input[type=color] {
   flex-shrink: 0;
 }
 .color-preset:hover, .color-preset.active {
-  border-color: rgba(255,255,255,0.65);
+  border-color: var(--hover-border);
   transform: scale(1.1);
 }
 
@@ -419,7 +453,7 @@ input[type=color] {
   cursor: pointer;
   transition: all 0.12s;
 }
-.bg-tab.active { background: rgba(200,255,0,0.12); border-color: var(--accent); color: var(--accent); }
+.bg-tab.active { background: rgba(250,190,100,0.12); border-color: var(--accent); color: var(--accent); }
 
 /* Gradient presets */
 .grad-presets { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
@@ -428,22 +462,22 @@ input[type=color] {
   cursor: pointer; border: 2px solid transparent;
   transition: all 0.12s; flex: 1; min-width: 48px;
 }
-.grad-preset:hover, .grad-preset.active { border-color: rgba(255,255,255,0.6); }
+.grad-preset:hover, .grad-preset.active { border-color: var(--hover-border); }
 
 /* Apply-to-all button */
 .apply-all-btn {
   width: 100%; height: 28px;
   border-radius: var(--radius);
   border: 1px solid var(--border2);
-  background: rgba(124,77,255,0.08);
-  color: #b39ddb;
+  background: rgba(250,139,100,0.08);
+  color: #fbb49a;
   font-family: inherit;
   font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;
   margin-top: 6px;
 }
-.apply-all-btn:hover { background: rgba(124,77,255,0.18); border-color: #7c4dff; }
+.apply-all-btn:hover { background: rgba(250,139,100,0.18); border-color: #FA8B64; }
 
 /* Text blocks list */
 #text-blocks-list { display: flex; flex-direction: column; gap: 5px; }
@@ -457,7 +491,7 @@ input[type=color] {
   position: relative;
 }
 .text-block-item.active { border-color: var(--accent); }
-.text-block-item:hover { border-color: rgba(255,255,255,0.2); }
+.text-block-item:hover { border-color: var(--hover-border); }
 .tbi-label { font-size: 10px; color: var(--text2); margin-bottom: 2px; }
 .tbi-preview {
   font-size: 12px;
@@ -487,7 +521,7 @@ input[type=color] {
   transition: all 0.15s;
   margin-top: 5px;
 }
-.add-text-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(200,255,0,0.04); }
+.add-text-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(250,190,100,0.06); }
 
 /* Alignment buttons */
 .align-btns { display: flex; gap: 4px; flex: 1; }
@@ -502,7 +536,7 @@ input[type=color] {
   transition: all 0.12s;
 }
 .align-btn.active, .align-btn:hover {
-  background: rgba(200,255,0,0.12);
+  background: rgba(250,190,100,0.12);
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -525,7 +559,7 @@ input[type=color] {
   transition: all 0.12s;
   white-space: nowrap;
 }
-.snap-btn:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.2); color: var(--text); }
+.snap-btn:hover { background: var(--hover-bg); border-color: var(--hover-border); color: var(--text); }
 
 /* Font controls */
 .font-weight-row { display: flex; gap: 5px; }
@@ -608,8 +642,8 @@ input[type=color] {
   display: flex; flex-direction: column; align-items: center; gap: 5px;
   background: var(--panel2);
 }
-.export-fmt:hover { border-color: rgba(255,255,255,0.25); }
-.export-fmt.active { border-color: var(--accent); background: rgba(200,255,0,0.05); }
+.export-fmt:hover { border-color: var(--hover-border); }
+.export-fmt.active { border-color: var(--accent); background: rgba(250,190,100,0.07); }
 .fmt-icon {
   width: 100%; max-width: 48px;
   background: rgba(255,255,255,0.08);
@@ -617,7 +651,7 @@ input[type=color] {
   display: flex; align-items: center; justify-content: center;
 }
 .fmt-icon span { font-size: 9px; color: var(--text2); font-weight: 600; padding: 3px 0; }
-.export-fmt.active .fmt-icon { background: rgba(200,255,0,0.15); }
+.export-fmt.active .fmt-icon { background: rgba(250,190,100,0.15); }
 .export-fmt.active .fmt-icon span { color: var(--accent); }
 .fmt-name { font-size: 11px; font-weight: 600; color: var(--text); }
 .fmt-dim { font-size: 9px; color: var(--text3); }
@@ -644,8 +678,8 @@ input[type=color] {
 }
 #bulk-box h3 { font-size: 16px; font-weight: 700; color: var(--accent); }
 .bulk-hint {
-  background: rgba(200,255,0,0.05);
-  border: 1px solid rgba(200,255,0,0.15);
+  background: rgba(250,190,100,0.06);
+  border: 1px solid rgba(250,190,100,0.18);
   border-radius: 7px;
   padding: 10px 12px;
   font-size: 11px; line-height: 1.9;
@@ -664,7 +698,7 @@ input[type=color] {
   max-width: 190px;
 }
 .bulk-chip-num {
-  background: rgba(200,255,0,0.15);
+  background: rgba(250,190,100,0.18);
   color: var(--accent);
   font-size: 9px; font-weight: 700;
   padding: 1px 4px; border-radius: 3px;
@@ -711,6 +745,8 @@ input[type=color] {
   <button class="tb-btn" onclick="showAnimPreview()" title="Preview your slides as an animation">▶ Preview</button>
   <button class="tb-btn primary" onclick="showExport()" title="Export slides as PNG images in a ZIP file">↓ Export</button>
   <span id="slide-count">0 slides</span>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle light / dark mode" style="font-size:15px;padding:0 8px;">☀︎</button>
 </div>
 
 <div id="main">
@@ -1780,7 +1816,9 @@ function deleteSlide(i) {
 
 function selectSlide(i) {
   currentSlideIdx = i;
-  selectedTextIdx = null;
+  // Auto-select first text block if the slide has any, so the right panel stays visible
+  const blocks = slides[i] && slides[i].textBlocks;
+  selectedTextIdx = (blocks && blocks.length > 0) ? 0 : null;
   refreshSlidePicker();
   loadSlideToUI();
   renderCurrent();
@@ -2340,7 +2378,7 @@ const GRAD_PRESETS = [
 const TEXT_COLORS = [
   '#ffffff','#f5f5f0','#e8e8e8','#cccccc',
   '#000000','#111111','#333333','#555555',
-  '#c8ff00','#ffd700','#ff6b6b','#4ecdc4',
+  '#FABE64','#FA8B64','#65E9FA','#ffd700',
   '#a8e6cf','#ffb6c1','#b39ddb','#80cbc4',
 ];
 
@@ -2787,9 +2825,25 @@ document.addEventListener('keydown', e => {
 
 window.addEventListener('resize', updateCanvasScale);
 
+// ─── THEME ────────────────────────────────────────────────────────────────────
+
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  const btn = document.getElementById('theme-btn');
+  if (btn) btn.textContent = t === 'dark' ? '☀︎' : '☾';
+  localStorage.setItem('sm-theme', t);
+}
+
+function toggleTheme() {
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
 async function init() {
+  // Restore saved theme preference
+  applyTheme(localStorage.getItem('sm-theme') || 'dark');
+
   // Load fonts first
   await loadFonts();
 
@@ -2839,7 +2893,7 @@ async function init() {
   tb2.fontWeight = '700';
   tb2.fontSize = 120;
   tb2.align = 'left';
-  tb2.color = '#c8ff00';
+  tb2.color = '#FABE64';
   tb2.x = 80; tb2.y = 200; tb2.width = 900;
   s2.textBlocks.push(tb2);
   slides.push(s2);
