@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Slide Maker by NOICE</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 /* ─── Reset & Root ──────────────────────────────────────────────────────────── */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -752,6 +753,7 @@ input[type=color] {
       <div class="bg-tabs">
         <button class="bg-tab active" id="bg-solid-tab" onclick="setBgType('solid')">Solid</button>
         <button class="bg-tab" id="bg-grad-tab" onclick="setBgType('gradient')">Gradient</button>
+        <button class="bg-tab" id="bg-image-tab" onclick="setBgType('image')">Image</button>
       </div>
 
       <div id="bg-solid-ctrl">
@@ -760,6 +762,41 @@ input[type=color] {
           <span class="small-label">Background color</span>
         </div>
         <div class="color-presets" id="bg-presets"></div>
+      </div>
+
+      <div id="bg-image-ctrl" style="display:none">
+        <div class="ctrl-row" style="flex-direction:column;align-items:stretch;gap:6px;">
+          <label class="tb-btn" style="cursor:pointer;justify-content:center;text-align:center;">
+            📷 Upload Image
+            <input type="file" accept="image/*" style="display:none" onchange="setBgImage(event)">
+          </label>
+          <div id="bg-image-preview" style="display:none;position:relative;">
+            <img id="bg-img-thumb" style="width:100%;border-radius:4px;display:block;" alt="">
+            <button onclick="clearBgImage()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);border:none;color:#fff;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:11px;">✕</button>
+          </div>
+          <div class="ctrl-row" style="gap:6px;margin-top:2px;">
+            <span class="small-label">Fit:</span>
+            <select id="bg-image-fit" onchange="updateBgImageFit()" style="flex:1;">
+              <option value="cover">Cover (fill)</option>
+              <option value="contain">Contain (letterbox)</option>
+              <option value="stretch">Stretch</option>
+            </select>
+          </div>
+          <div id="bg-image-offset-rows" style="display:none">
+            <div class="ctrl-row">
+              <span class="small-label" style="width:28px;">X</span>
+              <input type="range" min="-540" max="540" value="0" id="bg-img-x" data-default="0"
+                oninput="updateBgImageOffset(); document.getElementById('bg-img-x-val').textContent=this.value" style="flex:1;">
+              <span class="small-label" id="bg-img-x-val" style="width:32px;text-align:right;">0</span>
+            </div>
+            <div class="ctrl-row">
+              <span class="small-label" style="width:28px;">Y</span>
+              <input type="range" min="-540" max="540" value="0" id="bg-img-y" data-default="0"
+                oninput="updateBgImageOffset(); document.getElementById('bg-img-y-val').textContent=this.value" style="flex:1;">
+              <span class="small-label" id="bg-img-y-val" style="width:32px;text-align:right;">0</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div id="bg-grad-ctrl" style="display:none">
@@ -1054,7 +1091,7 @@ And this becomes slide three</div>
       <span id="export-status" style="font-size:11px;color:var(--text2);">Exporting…</span>
     </div>
     <div style="display:flex;gap:7px;">
-      <button class="tb-btn primary" onclick="doExport()" style="flex:1;justify-content:center;">Export All PNGs</button>
+      <button class="tb-btn primary" onclick="doExport()" style="flex:1;justify-content:center;">↓ Export as ZIP</button>
       <button class="tb-btn" onclick="closeExport()">Cancel</button>
     </div>
   </div>
@@ -1163,8 +1200,22 @@ function makeSlide() {
     gradC1: '#1a1a2e',
     gradC2: '#4a0072',
     gradAngle: 135,
+    bgImage: null,       // base64 dataURL
+    bgImageFit: 'cover',
+    bgImageX: 0,         // pixel offset from center (1080-space)
+    bgImageY: 0,
     textBlocks: []
   };
+}
+
+// Cache of loaded Image elements keyed by dataURL (for sync rendering)
+const bgImageCache = new Map();
+
+function ensureBgImageCached(dataURL) {
+  if (!dataURL || bgImageCache.has(dataURL)) return;
+  const img = new Image();
+  img.src = dataURL;
+  bgImageCache.set(dataURL, img);
 }
 
 function makeTextBlock() {
@@ -1283,7 +1334,31 @@ function renderSlideToSize(slide, targetW, targetH) {
   const scaleY = targetH / CANVAS_SIZE;
 
   // Background
-  if (slide.bgType === 'gradient') {
+  if (slide.bgType === 'image' && slide.bgImage) {
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, targetW, targetH);
+    const img = bgImageCache.get(slide.bgImage);
+    if (img && img.complete && img.naturalWidth) {
+      const fit = slide.bgImageFit || 'cover';
+      const iw = img.naturalWidth, ih = img.naturalHeight;
+      let dx = 0, dy = 0, dw = targetW, dh = targetH;
+      // Scale offsets from 1080-space to targetW-space
+      const offX = (slide.bgImageX || 0) * (targetW / CANVAS_SIZE);
+      const offY = (slide.bgImageY || 0) * (targetH / CANVAS_SIZE);
+      if (fit === 'cover') {
+        const scale = Math.max(targetW / iw, targetH / ih);
+        dw = iw * scale; dh = ih * scale;
+        dx = (targetW - dw) / 2 + offX; dy = (targetH - dh) / 2 + offY;
+      } else if (fit === 'contain') {
+        const scale = Math.min(targetW / iw, targetH / ih);
+        dw = iw * scale; dh = ih * scale;
+        dx = (targetW - dw) / 2 + offX; dy = (targetH - dh) / 2 + offY;
+      } else {
+        // stretch — offsets don't apply
+      }
+      g.drawImage(img, dx, dy, dw, dh);
+    }
+  } else if (slide.bgType === 'gradient') {
     const rad = (slide.gradAngle - 90) * Math.PI / 180;
     const cx = targetW / 2, cy = targetH / 2;
     const d = Math.sqrt(targetW * targetW + targetH * targetH) / 2;
@@ -1294,10 +1369,11 @@ function renderSlideToSize(slide, targetW, targetH) {
     grd.addColorStop(0, slide.gradC1);
     grd.addColorStop(1, slide.gradC2);
     g.fillStyle = grd;
+    g.fillRect(0, 0, targetW, targetH);
   } else {
     g.fillStyle = slide.bgColor;
+    g.fillRect(0, 0, targetW, targetH);
   }
-  g.fillRect(0, 0, targetW, targetH);
 
   // Text blocks — scale from 1080-space
   slide.textBlocks.forEach(tb => {
@@ -1638,16 +1714,28 @@ function loadSlideToUI() {
   if (!slides.length) return;
   const s = slides[currentSlideIdx];
 
-  bgType = s.bgType;
+  bgType = s.bgType || 'solid';
   document.getElementById('bg-solid-tab').classList.toggle('active', bgType === 'solid');
   document.getElementById('bg-grad-tab').classList.toggle('active', bgType === 'gradient');
+  document.getElementById('bg-image-tab').classList.toggle('active', bgType === 'image');
   document.getElementById('bg-solid-ctrl').style.display = bgType === 'solid' ? '' : 'none';
   document.getElementById('bg-grad-ctrl').style.display  = bgType === 'gradient' ? '' : 'none';
+  document.getElementById('bg-image-ctrl').style.display = bgType === 'image' ? '' : 'none';
   document.getElementById('bg-color').value   = s.bgColor;
   document.getElementById('grad-c1').value    = s.gradC1;
   document.getElementById('grad-c2').value    = s.gradC2;
   document.getElementById('grad-angle').value = s.gradAngle;
   document.getElementById('grad-angle-val').textContent = s.gradAngle + '°';
+  // Image bg
+  const hasImg = bgType === 'image' && s.bgImage;
+  document.getElementById('bg-image-preview').style.display = hasImg ? '' : 'none';
+  if (hasImg) document.getElementById('bg-img-thumb').src = s.bgImage;
+  document.getElementById('bg-image-fit').value = s.bgImageFit || 'cover';
+  document.getElementById('bg-image-offset-rows').style.display = hasImg ? '' : 'none';
+  document.getElementById('bg-img-x').value = s.bgImageX || 0;
+  document.getElementById('bg-img-y').value = s.bgImageY || 0;
+  document.getElementById('bg-img-x-val').textContent = s.bgImageX || 0;
+  document.getElementById('bg-img-y-val').textContent = s.bgImageY || 0;
 
   refreshTextList();
   refreshTextPanel();
@@ -1892,11 +1980,78 @@ function applyFormatToAll() {
 function setBgType(type) {
   bgType = type;
   if (!slides.length) return;
+  pushUndo();
   slides[currentSlideIdx].bgType = type;
   document.getElementById('bg-solid-tab').classList.toggle('active', type === 'solid');
   document.getElementById('bg-grad-tab').classList.toggle('active', type === 'gradient');
+  document.getElementById('bg-image-tab').classList.toggle('active', type === 'image');
   document.getElementById('bg-solid-ctrl').style.display = type === 'solid' ? '' : 'none';
   document.getElementById('bg-grad-ctrl').style.display  = type === 'gradient' ? '' : 'none';
+  document.getElementById('bg-image-ctrl').style.display = type === 'image' ? '' : 'none';
+  renderCurrent();
+}
+
+function setBgImage(event) {
+  const file = event.target.files[0];
+  if (!file || !slides.length) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    pushUndo();
+    const dataURL = e.target.result;
+    ensureBgImageCached(dataURL);
+    // Wait for image to load before rendering
+    const img = bgImageCache.get(dataURL);
+    const doRender = () => {
+      slides[currentSlideIdx].bgImage = dataURL;
+      slides[currentSlideIdx].bgType = 'image';
+      slides[currentSlideIdx].bgImageFit = document.getElementById('bg-image-fit').value;
+      slides[currentSlideIdx].bgImageX = 0;
+      slides[currentSlideIdx].bgImageY = 0;
+      bgType = 'image';
+      document.getElementById('bg-image-preview').style.display = '';
+      document.getElementById('bg-img-thumb').src = dataURL;
+      document.getElementById('bg-img-x').value = 0;
+      document.getElementById('bg-img-y').value = 0;
+      document.getElementById('bg-img-x-val').textContent = '0';
+      document.getElementById('bg-img-y-val').textContent = '0';
+      document.getElementById('bg-image-offset-rows').style.display = '';
+      renderCurrent();
+      scheduleSave();
+    };
+    if (img.complete) doRender();
+    else img.onload = doRender;
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+function clearBgImage() {
+  if (!slides.length) return;
+  pushUndo();
+  slides[currentSlideIdx].bgImage = null;
+  slides[currentSlideIdx].bgType = 'solid';
+  bgType = 'solid';
+  document.getElementById('bg-image-preview').style.display = 'none';
+  document.getElementById('bg-image-offset-rows').style.display = 'none';
+  document.getElementById('bg-solid-tab').classList.add('active');
+  document.getElementById('bg-image-tab').classList.remove('active');
+  document.getElementById('bg-solid-ctrl').style.display = '';
+  document.getElementById('bg-image-ctrl').style.display = 'none';
+  renderCurrent();
+}
+
+function updateBgImageFit() {
+  if (!slides.length) return;
+  pushUndoDebounced();
+  slides[currentSlideIdx].bgImageFit = document.getElementById('bg-image-fit').value;
+  renderCurrent();
+}
+
+function updateBgImageOffset() {
+  if (!slides.length) return;
+  pushUndoDebounced();
+  slides[currentSlideIdx].bgImageX = parseInt(document.getElementById('bg-img-x').value) || 0;
+  slides[currentSlideIdx].bgImageY = parseInt(document.getElementById('bg-img-y').value) || 0;
   renderCurrent();
 }
 
@@ -1913,14 +2068,19 @@ function updateBg() {
 
 function applyBgToAll() {
   if (!slides.length) return;
+  pushUndo();
   const s = slides[currentSlideIdx];
   slides.forEach((slide, i) => {
     if (i === currentSlideIdx) return;
-    slide.bgType   = s.bgType;
-    slide.bgColor  = s.bgColor;
-    slide.gradC1   = s.gradC1;
-    slide.gradC2   = s.gradC2;
+    slide.bgType    = s.bgType;
+    slide.bgColor   = s.bgColor;
+    slide.gradC1    = s.gradC1;
+    slide.gradC2    = s.gradC2;
     slide.gradAngle = s.gradAngle;
+    slide.bgImage    = s.bgImage;
+    slide.bgImageFit = s.bgImageFit;
+    slide.bgImageX   = s.bgImageX;
+    slide.bgImageY   = s.bgImageY;
   });
   updateThumbs();
 }
@@ -2050,11 +2210,16 @@ function updateUndoButtons() {
   document.getElementById('redo-btn').disabled = redoStack.length === 0;
 }
 
+function warmBgImageCache(slideList) {
+  slideList.forEach(s => { if (s.bgImage) ensureBgImageCached(s.bgImage); });
+}
+
 function restoreSnapshot(json) {
   const state = JSON.parse(json);
   slides = state.slides;
   currentSlideIdx = Math.min(state.currentSlideIdx, slides.length - 1);
   selectedTextIdx = null;
+  warmBgImageCache(slides);
   refreshSlidePicker();
   loadSlideToUI();
   renderCurrent();
@@ -2093,6 +2258,7 @@ function loadFromLocal() {
     if (!state.slides || !state.slides.length) return false;
     slides = state.slides;
     currentSlideIdx = Math.min(state.currentSlideIdx || 0, slides.length - 1);
+    warmBgImageCache(slides);
     return true;
   } catch(e) { return false; }
 }
@@ -2223,19 +2389,30 @@ async function doExport() {
   const status = document.getElementById('export-status');
   prog.style.display = 'flex';
 
+  const zip = new JSZip();
+
   for (let i = 0; i < slides.length; i++) {
     const off = renderSlideToSize(slides[i], fmt.w, fmt.h);
-    await new Promise(r => setTimeout(r, 30));
+    await new Promise(r => setTimeout(r, 20));
     pb.style.width = ((i + 1) / slides.length * 100) + '%';
-    status.textContent = `Exporting slide ${i + 1} of ${slides.length} at ${fmt.label}…`;
-    const link = document.createElement('a');
-    link.download = `${prefix}-${String(i + 1).padStart(2, '0')}-${selectedFmt}.png`;
-    link.href = off.toDataURL('image/png');
-    link.click();
-    await new Promise(r => setTimeout(r, 120));
+    status.textContent = `Rendering slide ${i + 1} of ${slides.length}…`;
+    const filename = `${prefix}-${String(i + 1).padStart(2, '0')}.png`;
+    // Convert dataURL to base64 string for JSZip
+    const dataURL = off.toDataURL('image/png');
+    const base64 = dataURL.split(',')[1];
+    zip.file(filename, base64, { base64: true });
   }
 
-  status.textContent = `Done! ${slides.length} slides exported at ${fmt.label}.`;
+  status.textContent = 'Building ZIP…';
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${prefix}-${selectedFmt}.zip`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  status.textContent = `Done! ${slides.length} slides exported as ZIP.`;
   setTimeout(closeExport, 2000);
 }
 
