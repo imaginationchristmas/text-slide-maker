@@ -300,7 +300,7 @@ body {
   white-space: nowrap;
 }
 .size-btn:hover { border-color: var(--border2); color: var(--text); }
-.size-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.size-btn.active { border-color: var(--accent); color: #fff; background: var(--accent); }
 
 .sz-icon {
   display: inline-block;
@@ -453,7 +453,7 @@ input[type=color] {
   cursor: pointer;
   transition: all 0.12s;
 }
-.bg-tab.active { background: rgba(77,93,250,0.12); border-color: var(--accent); color: var(--accent); }
+.bg-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
 /* Gradient presets */
 .grad-presets { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
@@ -490,7 +490,7 @@ input[type=color] {
   transition: all 0.12s;
   position: relative;
 }
-.text-block-item.active { border-color: var(--accent); }
+.text-block-item.active { border-color: var(--accent); background: var(--accent-bg); }
 .text-block-item:hover { border-color: var(--hover-border); }
 .tbi-label { font-size: 10px; color: var(--text2); margin-bottom: 2px; }
 .tbi-preview {
@@ -535,7 +535,12 @@ input[type=color] {
   cursor: pointer;
   transition: all 0.12s;
 }
-.align-btn.active, .align-btn:hover {
+.align-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.align-btn:hover {
   background: rgba(77,93,250,0.12);
   border-color: var(--accent);
   color: var(--accent);
@@ -662,7 +667,7 @@ input[type=color] {
   background: var(--panel2);
 }
 .export-fmt:hover { border-color: var(--hover-border); }
-.export-fmt.active { border-color: var(--accent); background: rgba(77,93,250,0.07); }
+.export-fmt.active { border-color: var(--accent); background: var(--accent); color: #fff; }
 .fmt-icon {
   width: 100%; max-width: 48px;
   background: rgba(255,255,255,0.08);
@@ -670,8 +675,8 @@ input[type=color] {
   display: flex; align-items: center; justify-content: center;
 }
 .fmt-icon span { font-size: 9px; color: var(--text2); font-weight: 600; padding: 3px 0; }
-.export-fmt.active .fmt-icon { background: rgba(77,93,250,0.15); }
-.export-fmt.active .fmt-icon span { color: var(--accent); }
+.export-fmt.active .fmt-icon { background: rgba(255,255,255,0.18); }
+.export-fmt.active .fmt-icon span { color: #fff; }
 .fmt-name { font-size: 11px; font-weight: 600; color: var(--text); }
 .fmt-dim { font-size: 9px; color: var(--text3); }
 
