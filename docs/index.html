@@ -2004,12 +2004,18 @@ function closeAnim() {
 function drawAnimFrame() {
   const ac = document.getElementById('anim-canvas');
   const fmt = EXPORT_FORMATS[previewSize];
-  const maxW = Math.min(540, window.innerWidth - 80);
   const ratio = fmt.h / fmt.w;
-  ac.width  = maxW;
-  ac.height = Math.round(maxW * ratio);
-  ac.style.width  = maxW + 'px';
-  ac.style.height = Math.round(maxW * ratio) + 'px';
+  // Fit within viewport leaving room for controls (~100px) and padding
+  const maxW = Math.min(540, window.innerWidth - 80);
+  const maxH = window.innerHeight - 140;
+  // Constrain by height if portrait/story would overflow
+  const wFromH = Math.floor(maxH / ratio);
+  const fitW = Math.min(maxW, wFromH);
+  const fitH = Math.round(fitW * ratio);
+  ac.width  = fitW;
+  ac.height = fitH;
+  ac.style.width  = fitW + 'px';
+  ac.style.height = fitH + 'px';
   const off = renderSlideToSize(slides[animIdx], fmt.w, fmt.h);
   ac.getContext('2d').drawImage(off, 0, 0, ac.width, ac.height);
   document.getElementById('anim-info').textContent =
