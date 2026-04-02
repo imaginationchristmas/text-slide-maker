@@ -19,10 +19,10 @@
   --text:      #e8e8e8;
   --text2:     #888;
   --text3:     #555;
-  --accent:    #FABE64;
-  --accent2:   #FA8B64;
-  --accent3:   #65E9FA;
-  --accent-bg: rgba(250,190,100,0.10);
+  --accent:    #4D5DFA;
+  --accent2:   #AE4DFA;
+  --accent3:   #744DFA;
+  --accent-bg: rgba(77,93,250,0.10);
   --danger:    rgba(220,50,50,0.15);
   --danger-border: rgba(220,50,50,0.3);
   --danger-text: #f77;
@@ -46,10 +46,10 @@
   --text:      #1a1a1a;
   --text2:     #666;
   --text3:     #aaa;
-  --accent:    #c47a1a;
-  --accent2:   #c45a30;
-  --accent3:   #0aabcc;
-  --accent-bg: rgba(196,122,26,0.10);
+  --accent:    #2a3bd4;
+  --accent2:   #8a2ad4;
+  --accent3:   #5a2ad4;
+  --accent-bg: rgba(42,59,212,0.10);
   --danger:    rgba(180,30,30,0.1);
   --danger-border: rgba(180,30,30,0.25);
   --danger-text: #c00;
@@ -153,11 +153,11 @@ body {
   flex-shrink: 0;
 }
 .tb-btn:hover { background: var(--hover-bg); border-color: var(--hover-border); }
-.tb-btn.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
-.tb-btn.primary:hover { background: #fccb7e; }
+.tb-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+.tb-btn.primary:hover { background: #6b79fb; }
 .tb-btn.danger { background: var(--danger); border-color: var(--danger-border); color: var(--danger-text); }
-.tb-btn.purple { border-color: rgba(250,139,100,0.4); color: #fbb49a; }
-.tb-btn.purple:hover { background: rgba(250,139,100,0.1); border-color: rgba(250,139,100,0.6); }
+.tb-btn.purple { border-color: rgba(174,77,250,0.4); color: var(--accent2); }
+.tb-btn.purple:hover { background: rgba(174,77,250,0.1); border-color: var(--accent2); }
 
 #slide-count {
   font-size: 11px;
@@ -215,7 +215,7 @@ body {
   line-height: 1;
   transition: all 0.15s;
 }
-.add-slide-btn:hover { background: rgba(250,190,100,0.1); border-color: var(--accent); color: var(--accent); }
+.add-slide-btn:hover { background: rgba(77,93,250,0.1); border-color: var(--accent); color: var(--accent); }
 
 #slides-list {
   flex: 1;
@@ -292,7 +292,7 @@ body {
   border-radius: 6px;
   border: 1px solid var(--border2);
   background: var(--panel);
-  color: var(--text2);
+  color: var(--text);
   font-family: inherit;
   font-size: 11px; font-weight: 500;
   cursor: pointer;
@@ -393,7 +393,7 @@ input[type=text], input[type=number], textarea, select {
   width: 100%;
 }
 input[type=text]:focus, input[type=number]:focus, textarea:focus, select:focus {
-  border-color: rgba(250,190,100,0.5);
+  border-color: rgba(77,93,250,0.5);
 }
 textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
 select option { background: var(--panel2); }
@@ -447,13 +447,13 @@ input[type=color] {
   border-radius: 5px;
   border: 1px solid var(--border2);
   background: transparent;
-  color: var(--text2);
+  color: var(--text);
   font-family: inherit;
   font-size: 11px;
   cursor: pointer;
   transition: all 0.12s;
 }
-.bg-tab.active { background: rgba(250,190,100,0.12); border-color: var(--accent); color: var(--accent); }
+.bg-tab.active { background: rgba(77,93,250,0.12); border-color: var(--accent); color: var(--accent); }
 
 /* Gradient presets */
 .grad-presets { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
@@ -469,15 +469,15 @@ input[type=color] {
   width: 100%; height: 28px;
   border-radius: var(--radius);
   border: 1px solid var(--border2);
-  background: rgba(250,139,100,0.08);
-  color: #fbb49a;
+  background: rgba(174,77,250,0.08);
+  color: var(--accent2);
   font-family: inherit;
   font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;
   margin-top: 6px;
 }
-.apply-all-btn:hover { background: rgba(250,139,100,0.18); border-color: #FA8B64; }
+.apply-all-btn:hover { background: rgba(174,77,250,0.18); border-color: var(--accent2); }
 
 /* Text blocks list */
 #text-blocks-list { display: flex; flex-direction: column; gap: 5px; }
@@ -514,14 +514,14 @@ input[type=color] {
   border-radius: var(--radius);
   border: 1px dashed var(--border2);
   background: transparent;
-  color: var(--text2);
+  color: var(--text);
   font-family: inherit;
   font-size: 12px;
   cursor: pointer;
   transition: all 0.15s;
   margin-top: 5px;
 }
-.add-text-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(250,190,100,0.06); }
+.add-text-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(77,93,250,0.06); }
 
 /* Alignment buttons */
 .align-btns { display: flex; gap: 4px; flex: 1; }
@@ -530,13 +530,13 @@ input[type=color] {
   border-radius: 4px;
   border: 1px solid var(--border2);
   background: transparent;
-  color: var(--text2);
+  color: var(--text);
   font-size: 11px;
   cursor: pointer;
   transition: all 0.12s;
 }
 .align-btn.active, .align-btn:hover {
-  background: rgba(250,190,100,0.12);
+  background: rgba(77,93,250,0.12);
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -552,7 +552,7 @@ input[type=color] {
   border-radius: 4px;
   border: 1px solid var(--border2);
   background: transparent;
-  color: var(--text2);
+  color: var(--text);
   font-family: inherit;
   font-size: 10px;
   cursor: pointer;
@@ -610,7 +610,26 @@ input[type=color] {
 #anim-overlay.show { display: flex; }
 #anim-canvas { border-radius: 3px; box-shadow: 0 20px 60px rgba(0,0,0,0.8); }
 #anim-controls { display: flex; gap: 8px; }
-#anim-info { color: var(--text2); font-size: 12px; }
+#anim-controls .tb-btn {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.25);
+  color: #e8e8e8;
+}
+#anim-controls .tb-btn:hover {
+  background: rgba(255,255,255,0.18);
+  border-color: rgba(255,255,255,0.45);
+  color: #fff;
+}
+#anim-controls .tb-btn.danger {
+  background: rgba(220,50,50,0.2);
+  border-color: rgba(220,50,50,0.4);
+  color: #f77;
+}
+#anim-controls .tb-btn.danger:hover {
+  background: rgba(220,50,50,0.35);
+  border-color: rgba(220,50,50,0.6);
+}
+#anim-info { color: rgba(255,255,255,0.5); font-size: 12px; }
 
 /* ─── Export Modal ───────────────────────────────────────────────────────────── */
 #export-modal {
@@ -643,7 +662,7 @@ input[type=color] {
   background: var(--panel2);
 }
 .export-fmt:hover { border-color: var(--hover-border); }
-.export-fmt.active { border-color: var(--accent); background: rgba(250,190,100,0.07); }
+.export-fmt.active { border-color: var(--accent); background: rgba(77,93,250,0.07); }
 .fmt-icon {
   width: 100%; max-width: 48px;
   background: rgba(255,255,255,0.08);
@@ -651,7 +670,7 @@ input[type=color] {
   display: flex; align-items: center; justify-content: center;
 }
 .fmt-icon span { font-size: 9px; color: var(--text2); font-weight: 600; padding: 3px 0; }
-.export-fmt.active .fmt-icon { background: rgba(250,190,100,0.15); }
+.export-fmt.active .fmt-icon { background: rgba(77,93,250,0.15); }
 .export-fmt.active .fmt-icon span { color: var(--accent); }
 .fmt-name { font-size: 11px; font-weight: 600; color: var(--text); }
 .fmt-dim { font-size: 9px; color: var(--text3); }
@@ -678,8 +697,8 @@ input[type=color] {
 }
 #bulk-box h3 { font-size: 16px; font-weight: 700; color: var(--accent); }
 .bulk-hint {
-  background: rgba(250,190,100,0.06);
-  border: 1px solid rgba(250,190,100,0.18);
+  background: rgba(77,93,250,0.06);
+  border: 1px solid rgba(77,93,250,0.18);
   border-radius: 7px;
   padding: 10px 12px;
   font-size: 11px; line-height: 1.9;
@@ -698,7 +717,7 @@ input[type=color] {
   max-width: 190px;
 }
 .bulk-chip-num {
-  background: rgba(250,190,100,0.18);
+  background: rgba(77,93,250,0.18);
   color: var(--accent);
   font-size: 9px; font-weight: 700;
   padding: 1px 4px; border-radius: 3px;
@@ -2378,7 +2397,7 @@ const GRAD_PRESETS = [
 const TEXT_COLORS = [
   '#ffffff','#f5f5f0','#e8e8e8','#cccccc',
   '#000000','#111111','#333333','#555555',
-  '#FABE64','#FA8B64','#65E9FA','#ffd700',
+  '#4D5DFA','#AE4DFA','#744DFA','#ffd700',
   '#a8e6cf','#ffb6c1','#b39ddb','#80cbc4',
 ];
 
@@ -2893,7 +2912,7 @@ async function init() {
   tb2.fontWeight = '700';
   tb2.fontSize = 120;
   tb2.align = 'left';
-  tb2.color = '#FABE64';
+  tb2.color = '#4D5DFA';
   tb2.x = 80; tb2.y = 200; tb2.width = 900;
   s2.textBlocks.push(tb2);
   slides.push(s2);
