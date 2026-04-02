@@ -696,6 +696,14 @@ input[type=color] {
   <button class="tb-btn" onclick="duplicateSlide()">Duplicate</button>
   <button class="tb-btn purple" onclick="showBulkImport()">✍ Write Slides</button>
   <div class="tb-sep"></div>
+  <button class="tb-btn" id="undo-btn" onclick="undo()" title="Undo (⌘Z)" disabled>↩ Undo</button>
+  <button class="tb-btn" id="redo-btn" onclick="redo()" title="Redo (⌘⇧Z)" disabled>↪ Redo</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="exportProject()" title="Save project as JSON">⬇ Save</button>
+  <label class="tb-btn" title="Load project from JSON" style="cursor:pointer;">
+    📂 Load<input type="file" accept=".json" style="display:none" onchange="importProject(event)">
+  </label>
+  <div class="tb-sep"></div>
   <button class="tb-btn" onclick="showAnimPreview()">▶ Preview</button>
   <button class="tb-btn primary" onclick="showExport()">↓ Export</button>
   <span id="slide-count">0 slides</span>
@@ -1141,6 +1149,11 @@ let animIdx = 0;
 let animPlaying = false;
 let animTimer = null;
 
+// Undo/Redo state
+let undoStack = [];
+let redoStack = [];
+let saveTimer = null;
+
 // ─── SLIDE & TEXT BLOCK FACTORIES ─────────────────────────────────────────────
 
 function makeSlide() {
@@ -1552,6 +1565,7 @@ window.addEventListener('mouseup', () => {
 // ─── SLIDES MANAGEMENT ────────────────────────────────────────────────────────
 
 function addSlide(copyFrom) {
+  pushUndo();
   const s = copyFrom ? JSON.parse(JSON.stringify(copyFrom)) : makeSlide();
   slides.push(s);
   currentSlideIdx = slides.length - 1;
@@ -1568,6 +1582,7 @@ function duplicateSlide() {
 
 function deleteSlide(i) {
   if (slides.length <= 1) { alert('Cannot delete the last slide.'); return; }
+  pushUndo();
   slides.splice(i, 1);
   currentSlideIdx = Math.min(currentSlideIdx, slides.length - 1);
   selectedTextIdx = null;
@@ -1642,6 +1657,7 @@ function loadSlideToUI() {
 
 function addTextBlock() {
   if (!slides.length) return;
+  pushUndo();
   const tb = makeTextBlock();
   slides[currentSlideIdx].textBlocks.push(tb);
   selectedTextIdx = slides[currentSlideIdx].textBlocks.length - 1;
@@ -1651,6 +1667,7 @@ function addTextBlock() {
 }
 
 function deleteTextBlock(i) {
+  pushUndo();
   slides[currentSlideIdx].textBlocks.splice(i, 1);
   if (selectedTextIdx >= slides[currentSlideIdx].textBlocks.length)
     selectedTextIdx = slides[currentSlideIdx].textBlocks.length - 1;
@@ -1761,6 +1778,7 @@ function toggleStrokeFields() {
 
 function updateTextBlock() {
   if (selectedTextIdx === null || !slides.length) return;
+  pushUndoDebounced();
   const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
   tb.text          = document.getElementById('text-content').value;
   tb.fontFamily    = document.getElementById('font-family').value;
@@ -1797,6 +1815,7 @@ function setAlign(a) {
 
 function updatePosFromInput() {
   if (selectedTextIdx === null || !slides.length) return;
+  pushUndoDebounced();
   const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
   tb.x     = parseInt(document.getElementById('pos-x').value) || 0;
   tb.y     = parseInt(document.getElementById('pos-y').value) || 0;
@@ -1812,6 +1831,7 @@ function syncPosLabels(x, y, w) {
 
 function snapPos(dir) {
   if (selectedTextIdx === null || !slides.length) return;
+  pushUndo();
   const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
   const pad = 80;
   if (dir === 'left')     tb.x = pad;
@@ -1834,6 +1854,7 @@ function snapPos(dir) {
 
 function applyFormatToAll() {
   if (selectedTextIdx === null || !slides.length) return;
+  pushUndo();
   const src = slides[currentSlideIdx].textBlocks[selectedTextIdx];
   slides.forEach((slide, si) => {
     if (si === currentSlideIdx) return;
@@ -1881,6 +1902,7 @@ function setBgType(type) {
 
 function updateBg() {
   if (!slides.length) return;
+  pushUndoDebounced();
   const s = slides[currentSlideIdx];
   s.bgColor   = document.getElementById('bg-color').value;
   s.gradC1    = document.getElementById('grad-c1').value;
@@ -1985,6 +2007,132 @@ function initPresets() {
     };
     txtPre.appendChild(d);
   });
+}
+
+// ─── UNDO / REDO ──────────────────────────────────────────────────────────────
+
+const UNDO_LIMIT = 50;
+const LS_KEY = 'slideMakerProject';
+
+function snapshotState() {
+  return JSON.stringify({ slides: slides, currentSlideIdx: currentSlideIdx });
+}
+
+function pushUndo() {
+  undoStack.push(snapshotState());
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  redoStack = [];
+  updateUndoButtons();
+  scheduleSave();
+}
+
+// Debounced version for continuous inputs (sliders, text fields)
+let undoDebounceTimer = null;
+let undoPendingSnapshot = null;
+function pushUndoDebounced() {
+  // Capture the state BEFORE the change (only once per burst)
+  if (!undoPendingSnapshot) undoPendingSnapshot = snapshotState();
+  clearTimeout(undoDebounceTimer);
+  undoDebounceTimer = setTimeout(() => {
+    if (undoPendingSnapshot) {
+      undoStack.push(undoPendingSnapshot);
+      if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+      redoStack = [];
+      undoPendingSnapshot = null;
+      updateUndoButtons();
+      scheduleSave();
+    }
+  }, 600);
+}
+
+function updateUndoButtons() {
+  document.getElementById('undo-btn').disabled = undoStack.length === 0;
+  document.getElementById('redo-btn').disabled = redoStack.length === 0;
+}
+
+function restoreSnapshot(json) {
+  const state = JSON.parse(json);
+  slides = state.slides;
+  currentSlideIdx = Math.min(state.currentSlideIdx, slides.length - 1);
+  selectedTextIdx = null;
+  refreshSlidePicker();
+  loadSlideToUI();
+  renderCurrent();
+}
+
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(snapshotState());
+  restoreSnapshot(undoStack.pop());
+  updateUndoButtons();
+  scheduleSave();
+}
+
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(snapshotState());
+  restoreSnapshot(redoStack.pop());
+  updateUndoButtons();
+  scheduleSave();
+}
+
+// ─── SAVE / LOAD (localStorage) ───────────────────────────────────────────────
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(LS_KEY, snapshotState()); } catch(e) {}
+  }, 800);
+}
+
+function loadFromLocal() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return false;
+    const state = JSON.parse(raw);
+    if (!state.slides || !state.slides.length) return false;
+    slides = state.slides;
+    currentSlideIdx = Math.min(state.currentSlideIdx || 0, slides.length - 1);
+    return true;
+  } catch(e) { return false; }
+}
+
+// ─── EXPORT / IMPORT PROJECT JSON ─────────────────────────────────────────────
+
+function exportProject() {
+  const name = prompt('Save project as:', 'my-slides');
+  if (name === null) return; // cancelled
+  const filename = (name.trim() || 'my-slides').replace(/\.json$/i, '') + '.json';
+  const data = snapshotState();
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importProject(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const state = JSON.parse(e.target.result);
+      if (!state.slides || !state.slides.length) { alert('Invalid project file.'); return; }
+      pushUndo();
+      slides = state.slides;
+      currentSlideIdx = Math.min(state.currentSlideIdx || 0, slides.length - 1);
+      selectedTextIdx = null;
+      refreshSlidePicker();
+      loadSlideToUI();
+      renderCurrent();
+    } catch(err) { alert('Could not load project: ' + err.message); }
+  };
+  reader.readAsText(file);
+  // Reset input so same file can be re-loaded
+  event.target.value = '';
 }
 
 // ─── ANIMATION PREVIEW ────────────────────────────────────────────────────────
@@ -2127,6 +2275,7 @@ function updateBulkPreview() {
 function doBulkImport() {
   const raw = document.getElementById('bulk-input').value.trim();
   if (!raw) return;
+  pushUndo();
   const parts = parseBulkText(raw);
   if (!parts.length) return;
 
@@ -2188,7 +2337,14 @@ document.addEventListener('dblclick', e => {
 });
 
 document.addEventListener('keydown', e => {
-  // Don't fire when typing in inputs/textareas
+  // Undo/Redo — fire even when inputs are focused (standard app behaviour)
+  if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+    e.preventDefault();
+    if (e.shiftKey) { redo(); } else { undo(); }
+    return;
+  }
+
+  // Don't fire other shortcuts when typing in inputs/textareas
   const tag = document.activeElement.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
   // Don't fire when a modal is open
@@ -2239,6 +2395,17 @@ async function init() {
   // Scale canvas
   updateCanvasScale();
 
+  // Try to restore from localStorage
+  if (loadFromLocal()) {
+    currentSlideIdx = Math.min(currentSlideIdx, slides.length - 1);
+    refreshSlidePicker();
+    loadSlideToUI();
+    renderCurrent();
+    updateUndoButtons();
+    document.getElementById('loading-screen').style.display = 'none';
+    return;
+  }
+
   // Create 3 sample slides
   const s1 = makeSlide();
   s1.bgType = 'gradient';
@@ -2288,6 +2455,7 @@ async function init() {
   refreshSlidePicker();
   loadSlideToUI();
   renderCurrent();
+  updateUndoButtons();
 
   // Hide loading screen
   document.getElementById('loading-screen').style.display = 'none';
