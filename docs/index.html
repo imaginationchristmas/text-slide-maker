@@ -763,7 +763,7 @@ input[type=color] {
         </div>
         <div class="ctrl-row">
           <span class="small-label">Angle</span>
-          <input type="range" min="0" max="360" value="135" id="grad-angle"
+          <input type="range" min="0" max="360" value="135" id="grad-angle" data-default="135"
             oninput="updateBg(); document.getElementById('grad-angle-val').textContent=this.value+'°'">
           <span class="small-label" id="grad-angle-val">135°</span>
         </div>
@@ -801,7 +801,7 @@ input[type=color] {
       </div>
       <div class="ctrl-row">
         <span class="small-label">Size</span>
-        <input type="range" min="10" max="300" value="80" id="font-size"
+        <input type="range" min="10" max="300" value="80" id="font-size" data-default="80"
           oninput="updateTextBlock(); document.getElementById('font-size-num').value=this.value"
           style="flex:1;">
         <input type="number" id="font-size-num" value="80" min="10" max="300"
@@ -810,13 +810,13 @@ input[type=color] {
       </div>
       <div class="ctrl-row">
         <span class="small-label">Leading</span>
-        <input type="range" min="0.7" max="2.5" step="0.05" value="1.2" id="line-height"
+        <input type="range" min="0.7" max="2.5" step="0.05" value="1.2" id="line-height" data-default="1.2"
           oninput="updateTextBlock(); document.getElementById('lh-val').textContent=parseFloat(this.value).toFixed(2)">
         <span class="small-label" id="lh-val">1.20</span>
       </div>
       <div class="ctrl-row">
         <span class="small-label">Tracking</span>
-        <input type="range" min="-10" max="40" step="0.5" value="0" id="letter-spacing"
+        <input type="range" min="-10" max="40" step="0.5" value="0" id="letter-spacing" data-default="0"
           oninput="updateTextBlock(); document.getElementById('ls-val').textContent=parseFloat(this.value).toFixed(1)">
         <span class="small-label" id="ls-val">0.0</span>
       </div>
@@ -828,7 +828,7 @@ input[type=color] {
       <div class="ctrl-row">
         <input type="color" id="text-color" value="#ffffff" oninput="updateTextBlock()">
         <span class="small-label">Color</span>
-        <input type="range" min="0" max="100" value="100" id="text-opacity"
+        <input type="range" min="0" max="100" value="100" id="text-opacity" data-default="100"
           oninput="updateTextBlock(); document.getElementById('op-val').textContent=this.value+'%'">
         <span class="small-label" id="op-val">100%</span>
       </div>
@@ -871,25 +871,25 @@ input[type=color] {
         <div class="ctrl-row">
           <span class="small-label">Color</span>
           <input type="color" id="shadow-color" value="#000000" oninput="updateTextBlock()">
-          <input type="range" min="0" max="100" value="60" id="shadow-opacity"
+          <input type="range" min="0" max="100" value="60" id="shadow-opacity" data-default="60"
             oninput="updateTextBlock(); document.getElementById('sh-op-val').textContent=this.value+'%'" style="flex:1;">
           <span class="small-label" id="sh-op-val">60%</span>
         </div>
         <div class="ctrl-row">
           <span class="small-label" style="width:28px;">X</span>
-          <input type="range" min="-60" max="60" value="4" id="shadow-x"
+          <input type="range" min="-60" max="60" value="4" id="shadow-x" data-default="4"
             oninput="updateTextBlock(); document.getElementById('sh-x-val').textContent=this.value" style="flex:1;">
           <span class="small-label" id="sh-x-val" style="width:24px;text-align:right;">4</span>
         </div>
         <div class="ctrl-row">
           <span class="small-label" style="width:28px;">Y</span>
-          <input type="range" min="-60" max="60" value="4" id="shadow-y"
+          <input type="range" min="-60" max="60" value="4" id="shadow-y" data-default="4"
             oninput="updateTextBlock(); document.getElementById('sh-y-val').textContent=this.value" style="flex:1;">
           <span class="small-label" id="sh-y-val" style="width:24px;text-align:right;">4</span>
         </div>
         <div class="ctrl-row">
           <span class="small-label" style="width:28px;">Blur</span>
-          <input type="range" min="0" max="80" value="8" id="shadow-blur"
+          <input type="range" min="0" max="80" value="8" id="shadow-blur" data-default="8"
             oninput="updateTextBlock(); document.getElementById('sh-bl-val').textContent=this.value" style="flex:1;">
           <span class="small-label" id="sh-bl-val" style="width:24px;text-align:right;">8</span>
         </div>
@@ -908,7 +908,7 @@ input[type=color] {
           <span class="small-label">Color</span>
           <input type="color" id="stroke-color" value="#000000" oninput="updateTextBlock()">
           <span class="small-label">Width</span>
-          <input type="range" min="1" max="20" value="2" id="stroke-width"
+          <input type="range" min="1" max="20" value="2" id="stroke-width" data-default="2"
             oninput="updateTextBlock(); document.getElementById('sw-val').textContent=this.value+'px'" style="flex:1;">
           <span class="small-label" id="sw-val">2px</span>
         </div>
@@ -918,19 +918,23 @@ input[type=color] {
     <!-- Position (shown when block selected) -->
     <div class="ctrl-section" id="pos-controls" style="display:none">
       <span class="ctrl-label">Position</span>
-      <div class="pos-grid">
-        <div class="pos-field">
-          <label>X (px)</label>
-          <input type="number" id="pos-x" value="80" oninput="updatePosFromInput()">
-        </div>
-        <div class="pos-field">
-          <label>Y (px)</label>
-          <input type="number" id="pos-y" value="400" oninput="updatePosFromInput()">
-        </div>
-        <div class="pos-field">
-          <label>Width (px)</label>
-          <input type="number" id="pos-w" value="920" oninput="updatePosFromInput()">
-        </div>
+      <div class="ctrl-row">
+        <span class="small-label" style="width:28px;">X</span>
+        <input type="range" min="0" max="1080" value="80" id="pos-x" data-default="80"
+          oninput="updatePosFromInput(); document.getElementById('pos-x-val').textContent=this.value" style="flex:1;">
+        <span class="small-label" id="pos-x-val" style="width:32px;text-align:right;">80</span>
+      </div>
+      <div class="ctrl-row">
+        <span class="small-label" style="width:28px;">Y</span>
+        <input type="range" min="0" max="1080" value="400" id="pos-y" data-default="400"
+          oninput="updatePosFromInput(); document.getElementById('pos-y-val').textContent=this.value" style="flex:1;">
+        <span class="small-label" id="pos-y-val" style="width:32px;text-align:right;">400</span>
+      </div>
+      <div class="ctrl-row">
+        <span class="small-label" style="width:28px;">W</span>
+        <input type="range" min="100" max="1080" value="920" id="pos-w" data-default="920"
+          oninput="updatePosFromInput(); document.getElementById('pos-w-val').textContent=this.value" style="flex:1;">
+        <span class="small-label" id="pos-w-val" style="width:32px;text-align:right;">920</span>
       </div>
       <div class="snap-btns">
         <button class="snap-btn" onclick="snapPos('left')">⟵ Left</button>
@@ -1536,6 +1540,7 @@ window.addEventListener('mousemove', e => {
   tb.y = Math.round(my - dragOffY);
   document.getElementById('pos-x').value = tb.x;
   document.getElementById('pos-y').value = tb.y;
+  syncPosLabels(tb.x, tb.y);
   renderCurrent();
 });
 
@@ -1741,6 +1746,7 @@ function refreshTextPanel() {
   document.getElementById('pos-x').value = tb.x;
   document.getElementById('pos-y').value = tb.y;
   document.getElementById('pos-w').value = tb.width;
+  syncPosLabels(tb.x, tb.y, tb.width);
 }
 
 function toggleShadowFields() {
@@ -1798,6 +1804,12 @@ function updatePosFromInput() {
   renderCurrent();
 }
 
+function syncPosLabels(x, y, w) {
+  document.getElementById('pos-x-val').textContent = Math.round(x);
+  document.getElementById('pos-y-val').textContent = Math.round(y);
+  if (w !== undefined) document.getElementById('pos-w-val').textContent = Math.round(w);
+}
+
 function snapPos(dir) {
   if (selectedTextIdx === null || !slides.length) return;
   const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
@@ -1816,6 +1828,7 @@ function snapPos(dir) {
   }
   document.getElementById('pos-x').value = Math.round(tb.x);
   document.getElementById('pos-y').value = Math.round(tb.y);
+  syncPosLabels(tb.x, tb.y);
   renderCurrent();
 }
 
@@ -1829,6 +1842,7 @@ function applyFormatToAll() {
       tb.fontSize      = src.fontSize;
       tb.fontWeight    = src.fontWeight;
       tb.fontStyle     = src.fontStyle;
+      tb.uppercase     = src.uppercase;
       tb.color         = src.color;
       tb.opacity       = src.opacity;
       tb.lineHeight    = src.lineHeight;
@@ -1837,6 +1851,16 @@ function applyFormatToAll() {
       tb.x             = src.x;
       tb.y             = src.y;
       tb.width         = src.width;
+      // Effects
+      tb.shadowOn      = src.shadowOn;
+      tb.shadowColor   = src.shadowColor;
+      tb.shadowOpacity = src.shadowOpacity;
+      tb.shadowX       = src.shadowX;
+      tb.shadowY       = src.shadowY;
+      tb.shadowBlur    = src.shadowBlur;
+      tb.strokeOn      = src.strokeOn;
+      tb.strokeColor   = src.strokeColor;
+      tb.strokeWidth   = src.strokeWidth;
     });
   });
   updateThumbs();
@@ -2145,6 +2169,17 @@ function showKbHint() {
   clearTimeout(kbHintTimer);
   kbHintTimer = setTimeout(() => el.classList.remove('show'), 2000);
 }
+
+// Double-click any range slider to reset it to its data-default value
+document.addEventListener('dblclick', e => {
+  if (e.target.tagName === 'INPUT' && e.target.type === 'range') {
+    const def = e.target.dataset.default;
+    if (def !== undefined) {
+      e.target.value = def;
+      e.target.dispatchEvent(new Event('input'));
+    }
+  }
+});
 
 document.addEventListener('keydown', e => {
   // Don't fire when typing in inputs/textareas
