@@ -987,7 +987,7 @@ input[type=color] {
       </div>
       <div class="ctrl-row">
         <span class="small-label" style="width:28px;">Y</span>
-        <input type="range" min="0" max="1080" value="400" id="pos-y" data-default="400"
+        <input type="range" min="0" max="1920" value="400" id="pos-y" data-default="400"
           oninput="updatePosFromInput(); document.getElementById('pos-y-val').textContent=this.value" style="flex:1;">
         <span class="small-label" id="pos-y-val" style="width:32px;text-align:right;">400</span>
       </div>
@@ -1400,13 +1400,12 @@ function renderSlideToSize(slide, targetW, targetH) {
     g.fillRect(0, 0, targetW, targetH);
   }
 
-  // Text blocks — scale from 1080-space
+  // Text blocks — X scales with canvas width; Y is absolute (same pixel position across formats)
   slide.textBlocks.forEach(tb => {
-    const vOffset = (targetH - CANVAS_SIZE * scaleY) / 2;
     const scaled = {
       ...tb,
       x: tb.x * scaleX,
-      y: tb.y * scaleY + vOffset,
+      y: tb.y,           // absolute Y — no vertical scaling
       width: tb.width * scaleX,
       fontSize: tb.fontSize * scaleX,
     };
@@ -1578,6 +1577,8 @@ function setPreviewSize(key) {
     `${fmt.w} × ${fmt.h} · ${fmt.name}`;
   mainCanvas.width  = fmt.w;
   mainCanvas.height = fmt.h;
+  // Update Y slider max to match format height
+  document.getElementById('pos-y').max = fmt.h;
   updateCanvasScale();
   renderCurrent();
 }
@@ -1603,11 +1604,10 @@ function screenToDesign(ex, ey) {
   const px = (ex - rect.left)  / scale;
   const py = (ey - rect.top)   / scale;
   const scaleX = fmt.w / CANVAS_SIZE;
-  const scaleY = fmt.h / CANVAS_SIZE;
-  const vOffset = (fmt.h - CANVAS_SIZE * scaleY) / 2;
+  // Y is absolute (no vertical scaling) — just convert from canvas pixels to design pixels
   return {
     x: px / scaleX,
-    y: (py - vOffset) / scaleY
+    y: py   // canvas Y == design Y
   };
 }
 
@@ -2154,8 +2154,7 @@ function snapPos(dir) {
   if (selectedTextIdx === null || !slides.length) return;
   pushUndo();
   const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
-  const currentFmt = EXPORT_FORMATS[previewSize];
-  const canvasH = currentFmt.h;
+  const canvasH = EXPORT_FORMATS[previewSize].h;  // use current format height for vertical snaps
   const pad = 80;
   if (dir === 'left')     tb.x = pad;
   if (dir === 'right')    tb.x = CANVAS_SIZE - tb.width - pad;
