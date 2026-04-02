@@ -857,7 +857,7 @@ input[type=color] {
             </div>
             <div class="ctrl-row">
               <span class="small-label" style="width:28px;">Zoom</span>
-              <input type="range" min="50" max="300" value="100" id="bg-img-scale" data-default="100"
+              <input type="range" min="10" max="300" value="100" id="bg-img-scale" data-default="100"
                 oninput="updateBgImageOffset(); document.getElementById('bg-img-scale-val').textContent=this.value+'%'" style="flex:1;"
                 title="Scale the background image up or down">
               <span class="small-label" id="bg-img-scale-val" style="width:36px;text-align:right;">100%</span>
@@ -1279,7 +1279,7 @@ function makeSlide() {
     bgImageFit: 'cover',
     bgImageX: 0,         // pixel offset from center (1080-space)
     bgImageY: 0,
-    bgImageScale: 100,   // percent, 50–300
+    bgImageScale: 100,   // percent, 10–300
     textBlocks: []
   };
 }
@@ -2887,50 +2887,9 @@ async function init() {
     return;
   }
 
-  // Create 3 sample slides
-  const s1 = makeSlide();
-  s1.bgType = 'gradient';
-  s1.gradC1 = '#0f3460';
-  s1.gradC2 = '#533483';
-  s1.gradAngle = 135;
-  const tb1 = makeTextBlock();
-  tb1.text = 'Your Story\nStarts Here';
-  tb1.fontFamily = 'Neue Haas Display';
-  tb1.fontWeight = '300';
-  tb1.fontSize = 110;
-  tb1.align = 'center';
-  tb1.x = 80; tb1.y = 340; tb1.width = 920;
-  s1.textBlocks.push(tb1);
-  slides.push(s1);
-
-  const s2 = makeSlide();
-  s2.bgColor = '#0d0d0d';
-  s2.bgType = 'solid';
-  const tb2 = makeTextBlock();
-  tb2.text = 'Every\nmoment\nmatters';
-  tb2.fontFamily = 'Proxima Nova';
-  tb2.fontWeight = '700';
-  tb2.fontSize = 120;
-  tb2.align = 'left';
-  tb2.color = '#4D5DFA';
-  tb2.x = 80; tb2.y = 200; tb2.width = 900;
-  s2.textBlocks.push(tb2);
-  slides.push(s2);
-
-  const s3 = makeSlide();
-  s3.bgType = 'gradient';
-  s3.gradC1 = '#3a1c1c';
-  s3.gradC2 = '#c8a96e';
-  s3.gradAngle = 145;
-  const tb3 = makeTextBlock();
-  tb3.text = '"The best time\nis always now."';
-  tb3.fontFamily = 'IBM Plex Sans';
-  tb3.fontWeight = '200';
-  tb3.fontSize = 72;
-  tb3.align = 'center';
-  tb3.x = 100; tb3.y = 380; tb3.width = 880;
-  s3.textBlocks.push(tb3);
-  slides.push(s3);
+  // Default sample slides
+  const defaultState = {"slides":[{"bgType":"solid","bgColor":"#5d27bf","gradC1":"#8adfb9","gradC2":"#7546d9","gradAngle":222,"bgImage":null,"bgImageFit":"cover","bgImageX":0,"bgImageY":0,"bgImageScale":100,"textBlocks":[{"text":"Your first slide starts here.","fontFamily":"Neue Haas Display","fontSize":55,"fontWeight":"400","fontStyle":"normal","uppercase":false,"color":"#ffffff","opacity":100,"align":"center","lineHeight":1.15,"letterSpacing":0,"x":80,"y":450,"width":920,"shadowOn":false,"shadowColor":"#000000","shadowOpacity":60,"shadowX":4,"shadowY":4,"shadowBlur":8,"strokeOn":false,"strokeColor":"#000000","strokeWidth":2}]},{"bgType":"solid","bgColor":"#5d27bf","gradC1":"#8adfb9","gradC2":"#7546d9","gradAngle":222,"bgImage":null,"bgImageFit":"cover","bgImageX":0,"bgImageY":0,"bgImageScale":100,"textBlocks":[{"text":"And then your next one...","fontFamily":"Neue Haas Display","fontSize":55,"fontWeight":"400","fontStyle":"normal","uppercase":false,"color":"#ffffff","opacity":100,"align":"center","lineHeight":1.15,"letterSpacing":0,"x":80,"y":450,"width":920,"shadowOn":false,"shadowColor":"#000000","shadowOpacity":60,"shadowX":4,"shadowY":4,"shadowBlur":8,"strokeOn":false,"strokeColor":"#000000","strokeWidth":2}]},{"bgType":"solid","bgColor":"#5d27bf","gradC1":"#8adfb9","gradC2":"#7546d9","gradAngle":222,"bgImage":null,"bgImageFit":"cover","bgImageX":0,"bgImageY":0,"bgImageScale":100,"textBlocks":[{"text":"And maybe one here...?","fontFamily":"Neue Haas Display","fontSize":55,"fontWeight":"400","fontStyle":"normal","uppercase":false,"color":"#ffffff","opacity":100,"align":"center","lineHeight":1.15,"letterSpacing":0,"x":80,"y":450,"width":920,"shadowOn":false,"shadowColor":"#000000","shadowOpacity":60,"shadowX":4,"shadowY":4,"shadowBlur":8,"strokeOn":false,"strokeColor":"#000000","strokeWidth":2}]}],"currentSlideIdx":0};
+  slides = defaultState.slides;
 
   currentSlideIdx = 0;
   refreshSlidePicker();
