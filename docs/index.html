@@ -208,6 +208,9 @@ body {
 }
 .slide-thumb:hover { border-color: rgba(255,255,255,0.2); }
 .slide-thumb.active { border-color: var(--accent); }
+.slide-thumb.selected { border-color: #4a9eff; background: rgba(74,158,255,0.1); }
+.slide-thumb.drag-over { border-color: var(--accent); border-style: dashed; opacity: 0.7; }
+.slide-thumb.dragging-src { opacity: 0.35; }
 .slide-thumb canvas { width: 100%; height: 100%; display: block; border-radius: 5px; }
 
 .slide-num {
@@ -693,9 +696,9 @@ input[type=color] {
 <div id="toolbar">
   <h1>SLIDE MAKER</h1>
   <div class="tb-sep"></div>
-  <button class="tb-btn" onclick="addSlide()">+ New Slide</button>
-  <button class="tb-btn" onclick="duplicateSlide()">Duplicate</button>
-  <button class="tb-btn purple" onclick="showBulkImport()">✍ Write Slides</button>
+  <button class="tb-btn" onclick="addSlide()" title="Add a new blank slide">+ New Slide</button>
+  <button class="tb-btn" onclick="duplicateSlide()" title="Duplicate the current slide">Duplicate</button>
+  <button class="tb-btn purple" onclick="showBulkImport()" title="Write multiple slides at once using text">✍ Write Slides</button>
   <div class="tb-sep"></div>
   <button class="tb-btn" id="undo-btn" onclick="undo()" title="Undo (⌘Z)" disabled>↩ Undo</button>
   <button class="tb-btn" id="redo-btn" onclick="redo()" title="Redo (⌘⇧Z)" disabled>↪ Redo</button>
@@ -705,8 +708,8 @@ input[type=color] {
     📂 Load<input type="file" accept=".json" style="display:none" onchange="importProject(event)">
   </label>
   <div class="tb-sep"></div>
-  <button class="tb-btn" onclick="showAnimPreview()">▶ Preview</button>
-  <button class="tb-btn primary" onclick="showExport()">↓ Export</button>
+  <button class="tb-btn" onclick="showAnimPreview()" title="Preview your slides as an animation">▶ Preview</button>
+  <button class="tb-btn primary" onclick="showExport()" title="Export slides as PNG images in a ZIP file">↓ Export</button>
   <span id="slide-count">0 slides</span>
 </div>
 
@@ -716,6 +719,8 @@ input[type=color] {
   <div id="slides-panel">
     <div id="slides-header">
       <span>Slides</span>
+      <button id="bulk-del-btn" onclick="bulkDeleteSlides()" title="Delete selected slides"
+        style="display:none;background:rgba(220,50,50,0.25);color:#ff6b6b;font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px;border:1px solid rgba(220,50,50,0.4);cursor:pointer;white-space:nowrap;line-height:1.4;">✕ Delete</button>
       <button class="add-slide-btn" onclick="addSlide()" title="Add slide">+</button>
     </div>
     <div id="slides-list"></div>
@@ -724,15 +729,15 @@ input[type=color] {
   <!-- Center: Canvas -->
   <div id="canvas-area">
     <div id="size-bar">
-      <button class="size-btn active" id="sz-square" onclick="setPreviewSize('square')">
+      <button class="size-btn active" id="sz-square" onclick="setPreviewSize('square')" title="Square format — 1080×1080 (Instagram post)">
         <span class="sz-icon" style="aspect-ratio:1/1;height:12px;"></span>
         Square<span class="sz-dim">1080×1080</span>
       </button>
-      <button class="size-btn" id="sz-portrait" onclick="setPreviewSize('portrait')">
+      <button class="size-btn" id="sz-portrait" onclick="setPreviewSize('portrait')" title="Portrait format — 1080×1350 (Instagram portrait)">
         <span class="sz-icon" style="aspect-ratio:4/5;height:14px;"></span>
         Portrait<span class="sz-dim">1080×1350</span>
       </button>
-      <button class="size-btn" id="sz-story" onclick="setPreviewSize('story')">
+      <button class="size-btn" id="sz-story" onclick="setPreviewSize('story')" title="Story format — 1080×1920 (Instagram/TikTok story)">
         <span class="sz-icon" style="aspect-ratio:9/16;height:16px;"></span>
         Story<span class="sz-dim">1080×1920</span>
       </button>
@@ -751,9 +756,9 @@ input[type=color] {
     <div class="ctrl-section">
       <span class="ctrl-label">Background</span>
       <div class="bg-tabs">
-        <button class="bg-tab active" id="bg-solid-tab" onclick="setBgType('solid')">Solid</button>
-        <button class="bg-tab" id="bg-grad-tab" onclick="setBgType('gradient')">Gradient</button>
-        <button class="bg-tab" id="bg-image-tab" onclick="setBgType('image')">Image</button>
+        <button class="bg-tab active" id="bg-solid-tab" onclick="setBgType('solid')" title="Use a solid color background">Solid</button>
+        <button class="bg-tab" id="bg-grad-tab" onclick="setBgType('gradient')" title="Use a gradient background">Gradient</button>
+        <button class="bg-tab" id="bg-image-tab" onclick="setBgType('image')" title="Use a photo as the background">Image</button>
       </div>
 
       <div id="bg-solid-ctrl">
@@ -772,7 +777,7 @@ input[type=color] {
           </label>
           <div id="bg-image-preview" style="display:none;position:relative;">
             <img id="bg-img-thumb" style="width:100%;border-radius:4px;display:block;" alt="">
-            <button onclick="clearBgImage()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);border:none;color:#fff;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:11px;">✕</button>
+            <button onclick="clearBgImage()" title="Remove background image" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);border:none;color:#fff;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:11px;">✕</button>
           </div>
           <div class="ctrl-row" style="gap:6px;margin-top:2px;">
             <span class="small-label">Fit:</span>
@@ -795,6 +800,17 @@ input[type=color] {
                 oninput="updateBgImageOffset(); document.getElementById('bg-img-y-val').textContent=this.value" style="flex:1;">
               <span class="small-label" id="bg-img-y-val" style="width:32px;text-align:right;">0</span>
             </div>
+            <div class="ctrl-row">
+              <span class="small-label" style="width:28px;">Zoom</span>
+              <input type="range" min="50" max="300" value="100" id="bg-img-scale" data-default="100"
+                oninput="updateBgImageOffset(); document.getElementById('bg-img-scale-val').textContent=this.value+'%'" style="flex:1;"
+                title="Scale the background image up or down">
+              <span class="small-label" id="bg-img-scale-val" style="width:36px;text-align:right;">100%</span>
+            </div>
+            <div class="ctrl-row" style="margin-top:4px;">
+              <input type="color" id="bg-img-bgcolor" value="#1a1a2e" oninput="updateBgImgColor()" title="Background color shown behind the image">
+              <span class="small-label" style="margin-left:4px;">Background color</span>
+            </div>
           </div>
         </div>
       </div>
@@ -815,14 +831,14 @@ input[type=color] {
         <div class="grad-presets" id="grad-presets"></div>
       </div>
 
-      <button class="apply-all-btn" onclick="applyBgToAll()">Apply background to all slides</button>
+      <button class="apply-all-btn" onclick="applyBgToAll()" title="Copy this slide's background to every other slide">Apply background to all slides</button>
     </div>
 
     <!-- Text Blocks -->
     <div class="ctrl-section">
       <span class="ctrl-label">Text Blocks</span>
       <div id="text-blocks-list"></div>
-      <button class="add-text-btn" onclick="addTextBlock()">+ Add Text Block</button>
+      <button class="add-text-btn" onclick="addTextBlock()" title="Add a new text block to this slide">+ Add Text Block</button>
     </div>
 
     <!-- Text Content (shown when block selected) -->
@@ -885,9 +901,9 @@ input[type=color] {
       <span class="ctrl-label">Alignment</span>
       <div class="ctrl-row">
         <div class="align-btns">
-          <button class="align-btn active" id="align-left" onclick="setAlign('left')">Left</button>
-          <button class="align-btn" id="align-center" onclick="setAlign('center')">Center</button>
-          <button class="align-btn" id="align-right" onclick="setAlign('right')">Right</button>
+          <button class="align-btn active" id="align-left" onclick="setAlign('left')" title="Align text to the left">Left</button>
+          <button class="align-btn" id="align-center" onclick="setAlign('center')" title="Center the text horizontally">Center</button>
+          <button class="align-btn" id="align-right" onclick="setAlign('right')" title="Align text to the right">Right</button>
         </div>
       </div>
       <div class="ctrl-row toggle-row" style="margin-top:8px;">
@@ -982,14 +998,14 @@ input[type=color] {
         <span class="small-label" id="pos-w-val" style="width:32px;text-align:right;">920</span>
       </div>
       <div class="snap-btns">
-        <button class="snap-btn" onclick="snapPos('left')">⟵ Left</button>
-        <button class="snap-btn" onclick="snapPos('center-h')">↔ H Center</button>
-        <button class="snap-btn" onclick="snapPos('right')">Right ⟶</button>
-        <button class="snap-btn" onclick="snapPos('top')">↑ Top</button>
-        <button class="snap-btn" onclick="snapPos('center-v')">↕ V Center</button>
-        <button class="snap-btn" onclick="snapPos('bottom')">↓ Bottom</button>
+        <button class="snap-btn" onclick="snapPos('left')" title="Snap text block to the left edge">⟵ Left</button>
+        <button class="snap-btn" onclick="snapPos('center-h')" title="Center text block horizontally">↔ H Center</button>
+        <button class="snap-btn" onclick="snapPos('right')" title="Snap text block to the right edge">Right ⟶</button>
+        <button class="snap-btn" onclick="snapPos('top')" title="Snap text block to the top edge">↑ Top</button>
+        <button class="snap-btn" onclick="snapPos('center-v')" title="Center text block vertically">↕ V Center</button>
+        <button class="snap-btn" onclick="snapPos('bottom')" title="Snap text block to the bottom edge">↓ Bottom</button>
       </div>
-      <button class="apply-all-btn" onclick="applyFormatToAll()">Apply text format to all slides</button>
+      <button class="apply-all-btn" onclick="applyFormatToAll()" title="Copy all text blocks (style, font, size, position) from this slide to every other slide — each slide keeps its own text content">Apply text layout to all slides</button>
     </div>
 
   </div><!-- /controls-panel -->
@@ -1004,7 +1020,7 @@ input[type=color] {
     <div style="padding:18px 22px 0; border-bottom:1px solid var(--border); padding-bottom:14px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
         <h3>Write Slides</h3>
-        <button onclick="closeBulkImport()" style="background:none;border:none;color:var(--text2);font-size:17px;cursor:pointer;line-height:1;">✕</button>
+        <button onclick="closeBulkImport()" title="Close" style="background:none;border:none;color:var(--text2);font-size:17px;cursor:pointer;line-height:1;">✕</button>
       </div>
       <p style="font-size:12px;color:var(--text2);line-height:1.6;">
         Type or paste your text below. Use <code style="background:var(--panel2);padding:1px 5px;border-radius:3px;font-size:11px;color:var(--accent);">---</code> on its own line to break to the next slide.
@@ -1041,8 +1057,8 @@ And this becomes slide three</div>
         </label>
       </div>
       <div style="display:flex;gap:7px;">
-        <button class="tb-btn primary" onclick="doBulkImport()" style="flex:1;justify-content:center;height:34px;font-size:13px;">Generate Slides</button>
-        <button class="tb-btn" onclick="closeBulkImport()" style="height:34px;">Cancel</button>
+        <button class="tb-btn primary" onclick="doBulkImport()" title="Create slides from the text above" style="flex:1;justify-content:center;height:34px;font-size:13px;">Generate Slides</button>
+        <button class="tb-btn" onclick="closeBulkImport()" title="Discard and close" style="height:34px;">Cancel</button>
       </div>
     </div>
   </div>
@@ -1052,10 +1068,10 @@ And this becomes slide three</div>
 <div id="anim-overlay" onclick="if(event.target===this)closeAnim()">
   <canvas id="anim-canvas" width="540" height="540"></canvas>
   <div id="anim-controls">
-    <button class="tb-btn" onclick="animPrev()">‹ Prev</button>
-    <button class="tb-btn" onclick="toggleAnimPlay()" id="play-btn">▶ Play</button>
-    <button class="tb-btn" onclick="animNext()">Next ›</button>
-    <button class="tb-btn danger" onclick="closeAnim()">✕ Close</button>
+    <button class="tb-btn" onclick="animPrev()" title="Go to previous slide">‹ Prev</button>
+    <button class="tb-btn" onclick="toggleAnimPlay()" id="play-btn" title="Play or pause the slideshow">▶ Play</button>
+    <button class="tb-btn" onclick="animNext()" title="Go to next slide">Next ›</button>
+    <button class="tb-btn danger" onclick="closeAnim()" title="Close preview">✕ Close</button>
   </div>
   <div id="anim-info"></div>
 </div>
@@ -1091,8 +1107,8 @@ And this becomes slide three</div>
       <span id="export-status" style="font-size:11px;color:var(--text2);">Exporting…</span>
     </div>
     <div style="display:flex;gap:7px;">
-      <button class="tb-btn primary" onclick="doExport()" style="flex:1;justify-content:center;">↓ Export as ZIP</button>
-      <button class="tb-btn" onclick="closeExport()">Cancel</button>
+      <button class="tb-btn primary" onclick="doExport()" title="Download all slides as PNG images in a ZIP file" style="flex:1;justify-content:center;">↓ Export as ZIP</button>
+      <button class="tb-btn" onclick="closeExport()" title="Discard and close">Cancel</button>
     </div>
   </div>
 </div>
@@ -1180,6 +1196,10 @@ let scale = 1;
 // Drag state
 let dragging = false;
 let dragOffX = 0, dragOffY = 0;
+// Background image drag state
+let draggingBg = false;
+let bgDragStartX = 0, bgDragStartY = 0;
+let bgDragOriginX = 0, bgDragOriginY = 0;
 
 // Animation state
 let animIdx = 0;
@@ -1204,6 +1224,7 @@ function makeSlide() {
     bgImageFit: 'cover',
     bgImageX: 0,         // pixel offset from center (1080-space)
     bgImageY: 0,
+    bgImageScale: 100,   // percent, 50–300
     textBlocks: []
   };
 }
@@ -1335,7 +1356,8 @@ function renderSlideToSize(slide, targetW, targetH) {
 
   // Background
   if (slide.bgType === 'image' && slide.bgImage) {
-    g.fillStyle = '#000';
+    // Fill with the slide's solid color first so it shows through transparent/scaled images
+    g.fillStyle = slide.bgColor || '#000000';
     g.fillRect(0, 0, targetW, targetH);
     const img = bgImageCache.get(slide.bgImage);
     if (img && img.complete && img.naturalWidth) {
@@ -1345,16 +1367,19 @@ function renderSlideToSize(slide, targetW, targetH) {
       // Scale offsets from 1080-space to targetW-space
       const offX = (slide.bgImageX || 0) * (targetW / CANVAS_SIZE);
       const offY = (slide.bgImageY || 0) * (targetH / CANVAS_SIZE);
+      const userScale = (slide.bgImageScale != null ? slide.bgImageScale : 100) / 100;
       if (fit === 'cover') {
-        const scale = Math.max(targetW / iw, targetH / ih);
+        const scale = Math.max(targetW / iw, targetH / ih) * userScale;
         dw = iw * scale; dh = ih * scale;
         dx = (targetW - dw) / 2 + offX; dy = (targetH - dh) / 2 + offY;
       } else if (fit === 'contain') {
-        const scale = Math.min(targetW / iw, targetH / ih);
+        const scale = Math.min(targetW / iw, targetH / ih) * userScale;
         dw = iw * scale; dh = ih * scale;
         dx = (targetW - dw) / 2 + offX; dy = (targetH - dh) / 2 + offY;
       } else {
-        // stretch — offsets don't apply
+        // stretch — scale still applies
+        dw = targetW * userScale; dh = targetH * userScale;
+        dx = (targetW - dw) / 2 + offX; dy = (targetH - dh) / 2 + offY;
       }
       g.drawImage(img, dx, dy, dw, dh);
     }
@@ -1590,21 +1615,27 @@ function screenToDesign(ex, ey) {
 
 const overlay = document.getElementById('canvas-overlay');
 
+// Shared hit test — uses generous font-size-based estimate, no font measurement.
+// Works reliably for new and loaded/saved slides regardless of font load state.
+function hitTestTextBlocks(slide, mx, my) {
+  for (let i = slide.textBlocks.length - 1; i >= 0; i--) {
+    const tb = slide.textBlocks[i];
+    const lineCount = tb.text ? Math.max(1, tb.text.split('\n').length) : 1;
+    const estimatedH = lineCount * tb.fontSize * (tb.lineHeight || 1.3) + tb.fontSize + 20;
+    if (mx >= tb.x - 20 && mx <= tb.x + tb.width + 20 &&
+        my >= tb.y - 20 && my <= tb.y + estimatedH) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 overlay.addEventListener('mousedown', e => {
   if (!slides.length) return;
   const slide = slides[currentSlideIdx];
   const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
 
-  let hit = -1;
-  for (let i = slide.textBlocks.length - 1; i >= 0; i--) {
-    const tb = slide.textBlocks[i];
-    const lines = wrapTextSimple(tb);
-    const h = lines.length * tb.fontSize * tb.lineHeight + 20;
-    if (mx >= tb.x - 10 && mx <= tb.x + tb.width + 10 &&
-        my >= tb.y - 10 && my <= tb.y + h) {
-      hit = i; break;
-    }
-  }
+  const hit = hitTestTextBlocks(slide, mx, my);
 
   if (hit >= 0) {
     selectedTextIdx = hit;
@@ -1614,6 +1645,16 @@ overlay.addEventListener('mousedown', e => {
     dragOffY = my - tb.y;
     selectTextBlock(hit);
     overlay.style.cursor = 'grabbing';
+  } else if (slide.bgType === 'image' && slide.bgImage) {
+    // Start background image pan
+    draggingBg = true;
+    bgDragStartX = e.clientX;
+    bgDragStartY = e.clientY;
+    bgDragOriginX = slide.bgImageX || 0;
+    bgDragOriginY = slide.bgImageY || 0;
+    overlay.style.cursor = 'grabbing';
+    selectedTextIdx = null;
+    refreshTextPanel();
   } else {
     selectedTextIdx = null;
     refreshTextPanel();
@@ -1621,7 +1662,71 @@ overlay.addEventListener('mousedown', e => {
   }
 });
 
+overlay.addEventListener('dblclick', e => {
+  if (!slides.length) return;
+  const slide = slides[currentSlideIdx];
+  const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
+
+  // Use a generous font-size-based hit estimate — no font measurement needed,
+  // so this works reliably for loaded/saved slides regardless of font load state.
+  const hit = hitTestTextBlocks(slide, mx, my);
+
+  if (hit >= 0) {
+    selectedTextIdx = hit;
+    selectTextBlock(hit);
+    // Use setTimeout so the panel is fully visible before we focus
+    setTimeout(() => {
+      const ta = document.getElementById('text-content');
+      if (ta) { ta.focus(); ta.select(); }
+    }, 0);
+  } else if (slide.bgType === 'image' && slide.bgImage) {
+    // Double-click on bg image resets pan and zoom to defaults
+    pushUndo();
+    slide.bgImageX = 0;
+    slide.bgImageY = 0;
+    slide.bgImageScale = 100;
+    document.getElementById('bg-img-x').value = 0;
+    document.getElementById('bg-img-y').value = 0;
+    document.getElementById('bg-img-x-val').textContent = '0';
+    document.getElementById('bg-img-y-val').textContent = '0';
+    document.getElementById('bg-img-scale').value = 100;
+    document.getElementById('bg-img-scale-val').textContent = '100%';
+    renderCurrent();
+    scheduleSave();
+  }
+});
+
+// Update cursor on hover
+overlay.addEventListener('mousemove', e => {
+  if (dragging || draggingBg) return;
+  if (!slides.length) return;
+  const slide = slides[currentSlideIdx];
+  const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
+  const onText = hitTestTextBlocks(slide, mx, my) >= 0;
+  if (onText || (slide.bgType === 'image' && slide.bgImage)) {
+    overlay.style.cursor = 'grab';
+  } else {
+    overlay.style.cursor = 'default';
+  }
+});
+
 window.addEventListener('mousemove', e => {
+  if (draggingBg) {
+    const slide = slides[currentSlideIdx];
+    const dx = (e.clientX - bgDragStartX) / scale;
+    const dy = (e.clientY - bgDragStartY) / scale;
+    const fmt = EXPORT_FORMATS[previewSize];
+    const designDx = Math.round(dx * (CANVAS_SIZE / fmt.w));
+    const designDy = Math.round(dy * (CANVAS_SIZE / fmt.h));
+    slide.bgImageX = Math.max(-540, Math.min(540, bgDragOriginX + designDx));
+    slide.bgImageY = Math.max(-540, Math.min(540, bgDragOriginY + designDy));
+    document.getElementById('bg-img-x').value = slide.bgImageX;
+    document.getElementById('bg-img-y').value = slide.bgImageY;
+    document.getElementById('bg-img-x-val').textContent = slide.bgImageX;
+    document.getElementById('bg-img-y-val').textContent = slide.bgImageY;
+    renderCurrent();
+    return;
+  }
   if (!dragging || selectedTextIdx === null) return;
   const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
   const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
@@ -1634,8 +1739,14 @@ window.addEventListener('mousemove', e => {
 });
 
 window.addEventListener('mouseup', () => {
+  if (draggingBg) {
+    draggingBg = false;
+    overlay.style.cursor = 'grab';
+    pushUndoDebounced();
+    scheduleSave();
+  }
   dragging = false;
-  overlay.style.cursor = 'default';
+  if (!draggingBg) overlay.style.cursor = 'default';
 });
 
 // ─── SLIDES MANAGEMENT ────────────────────────────────────────────────────────
@@ -1675,24 +1786,134 @@ function selectSlide(i) {
   renderCurrent();
 }
 
+// Multi-select state
+const selectedSlides = new Set();
+let slideDragSrcIdx = null;
+
 function refreshSlidePicker() {
   const list = document.getElementById('slides-list');
   list.innerHTML = '';
   slides.forEach((s, i) => {
     const div = document.createElement('div');
-    div.className = 'slide-thumb' + (i === currentSlideIdx ? ' active' : '');
+    let cls = 'slide-thumb';
+    if (i === currentSlideIdx) cls += ' active';
+    if (selectedSlides.has(i)) cls += ' selected';
+    div.className = cls;
+    div.draggable = true;
+    div.dataset.idx = i;
     div.innerHTML = `<canvas width="${CANVAS_SIZE}" height="${CANVAS_SIZE}"></canvas>
       <span class="slide-num">${i + 1}</span>
-      <button class="slide-del" onclick="event.stopPropagation();deleteSlide(${i})" title="Delete slide">✕</button>`;
-    div.onclick = () => selectSlide(i);
+      <button class="slide-del" title="Delete slide">✕</button>`;
+
+    // Click: select slide; Shift+click: toggle multi-select
+    div.addEventListener('click', e => {
+      if (e.shiftKey) {
+        if (selectedSlides.has(i)) {
+          selectedSlides.delete(i);
+        } else {
+          selectedSlides.add(i);
+        }
+        refreshSlidePicker();
+        updateBulkDelBtn();
+      } else {
+        selectedSlides.clear();
+        selectSlide(i);
+        updateBulkDelBtn();
+      }
+    });
+
+    // Delete button
+    div.querySelector('.slide-del').addEventListener('click', e => {
+      e.stopPropagation();
+      deleteSlide(i);
+    });
+
+    // Drag-to-reorder
+    div.addEventListener('dragstart', e => {
+      slideDragSrcIdx = i;
+      div.classList.add('dragging-src');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    div.addEventListener('dragend', () => {
+      div.classList.remove('dragging-src');
+      document.querySelectorAll('.slide-thumb').forEach(t => t.classList.remove('drag-over'));
+    });
+    div.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      document.querySelectorAll('.slide-thumb').forEach(t => t.classList.remove('drag-over'));
+      div.classList.add('drag-over');
+    });
+    div.addEventListener('dragleave', () => {
+      div.classList.remove('drag-over');
+    });
+    div.addEventListener('drop', e => {
+      e.preventDefault();
+      div.classList.remove('drag-over');
+      const destIdx = parseInt(div.dataset.idx);
+      if (slideDragSrcIdx === null || slideDragSrcIdx === destIdx) return;
+      pushUndo();
+      const moved = slides.splice(slideDragSrcIdx, 1)[0];
+      slides.splice(destIdx, 0, moved);
+      // Keep currentSlideIdx tracking the same slide
+      if (currentSlideIdx === slideDragSrcIdx) {
+        currentSlideIdx = destIdx;
+      } else if (slideDragSrcIdx < currentSlideIdx && destIdx >= currentSlideIdx) {
+        currentSlideIdx--;
+      } else if (slideDragSrcIdx > currentSlideIdx && destIdx <= currentSlideIdx) {
+        currentSlideIdx++;
+      }
+      selectedSlides.clear();
+      slideDragSrcIdx = null;
+      refreshSlidePicker();
+      loadSlideToUI();
+      renderCurrent();
+      scheduleSave();
+    });
+
     list.appendChild(div);
-    // Render thumbnail at 1080×1080 (always square for the strip)
+    // Render thumbnail
     const thumbCanvas = div.querySelector('canvas');
-    const off = renderSlideToSize(s, CANVAS_SIZE, CANVAS_SIZE);
-    thumbCanvas.getContext('2d').drawImage(off, 0, 0);
+    const sFmt = EXPORT_FORMATS[previewSize];
+    const off = renderSlideToSize(s, sFmt.w, sFmt.h);
+    const tc = thumbCanvas.getContext('2d');
+    tc.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    const tScale = Math.min(CANVAS_SIZE / sFmt.w, CANVAS_SIZE / sFmt.h);
+    const tw = sFmt.w * tScale, th = sFmt.h * tScale;
+    const tx = (CANVAS_SIZE - tw) / 2, ty = (CANVAS_SIZE - th) / 2;
+    tc.fillStyle = '#111';
+    tc.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    tc.drawImage(off, tx, ty, tw, th);
   });
   document.getElementById('slide-count').textContent =
     slides.length + (slides.length === 1 ? ' slide' : ' slides');
+}
+
+function updateBulkDelBtn() {
+  const btn = document.getElementById('bulk-del-btn');
+  if (btn) btn.style.display = selectedSlides.size > 0 ? '' : 'none';
+}
+
+function bulkDeleteSlides() {
+  if (!selectedSlides.size) return;
+  pushUndo();
+  // Delete in descending order to preserve indices
+  const toDelete = Array.from(selectedSlides).sort((a, b) => b - a);
+  toDelete.forEach(i => slides.splice(i, 1));
+  selectedSlides.clear();
+  currentSlideIdx = Math.max(0, Math.min(currentSlideIdx, slides.length - 1));
+  if (!slides.length) {
+    refreshSlidePicker();
+    loadSlideToUI();
+    renderCurrent();
+    updateBulkDelBtn();
+    return;
+  }
+  refreshSlidePicker();
+  loadSlideToUI();
+  renderCurrent();
+  updateBulkDelBtn();
+  scheduleSave();
 }
 
 function updateThumbs() {
@@ -1701,8 +1922,16 @@ function updateThumbs() {
     if (!slides[i]) return;
     const c = t.querySelector('canvas');
     if (c) {
-      const off = renderSlideToSize(slides[i], CANVAS_SIZE, CANVAS_SIZE);
-      c.getContext('2d').drawImage(off, 0, 0);
+      const sFmt = EXPORT_FORMATS[previewSize];
+      const off = renderSlideToSize(slides[i], sFmt.w, sFmt.h);
+      const tc = c.getContext('2d');
+      tc.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      const tScale = Math.min(CANVAS_SIZE / sFmt.w, CANVAS_SIZE / sFmt.h);
+      const tw = sFmt.w * tScale, th = sFmt.h * tScale;
+      const tx = (CANVAS_SIZE - tw) / 2, ty = (CANVAS_SIZE - th) / 2;
+      tc.fillStyle = '#111';
+      tc.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      tc.drawImage(off, tx, ty, tw, th);
     }
     t.className = 'slide-thumb' + (i === currentSlideIdx ? ' active' : '');
   });
@@ -1736,6 +1965,10 @@ function loadSlideToUI() {
   document.getElementById('bg-img-y').value = s.bgImageY || 0;
   document.getElementById('bg-img-x-val').textContent = s.bgImageX || 0;
   document.getElementById('bg-img-y-val').textContent = s.bgImageY || 0;
+  const sc = s.bgImageScale != null ? s.bgImageScale : 100;
+  document.getElementById('bg-img-scale').value = sc;
+  document.getElementById('bg-img-scale-val').textContent = sc + '%';
+  document.getElementById('bg-img-bgcolor').value = s.bgColor || '#1a1a2e';
 
   refreshTextList();
   refreshTextPanel();
@@ -1921,6 +2154,8 @@ function snapPos(dir) {
   if (selectedTextIdx === null || !slides.length) return;
   pushUndo();
   const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
+  const currentFmt = EXPORT_FORMATS[previewSize];
+  const canvasH = currentFmt.h;
   const pad = 80;
   if (dir === 'left')     tb.x = pad;
   if (dir === 'right')    tb.x = CANVAS_SIZE - tb.width - pad;
@@ -1928,11 +2163,11 @@ function snapPos(dir) {
   if (dir === 'top')      tb.y = pad;
   if (dir === 'bottom') {
     const lines = wrapTextSimple(tb).length;
-    tb.y = CANVAS_SIZE - lines * tb.fontSize * tb.lineHeight - pad;
+    tb.y = canvasH - lines * tb.fontSize * tb.lineHeight - pad;
   }
   if (dir === 'center-v') {
     const lines = wrapTextSimple(tb).length;
-    tb.y = (CANVAS_SIZE - lines * tb.fontSize * tb.lineHeight) / 2;
+    tb.y = (canvasH - lines * tb.fontSize * tb.lineHeight) / 2;
   }
   document.getElementById('pos-x').value = Math.round(tb.x);
   document.getElementById('pos-y').value = Math.round(tb.y);
@@ -1941,35 +2176,19 @@ function snapPos(dir) {
 }
 
 function applyFormatToAll() {
-  if (selectedTextIdx === null || !slides.length) return;
+  if (!slides.length) return;
   pushUndo();
-  const src = slides[currentSlideIdx].textBlocks[selectedTextIdx];
+  const srcBlocks = slides[currentSlideIdx].textBlocks;
   slides.forEach((slide, si) => {
     if (si === currentSlideIdx) return;
-    slide.textBlocks.forEach(tb => {
-      tb.fontFamily    = src.fontFamily;
-      tb.fontSize      = src.fontSize;
-      tb.fontWeight    = src.fontWeight;
-      tb.fontStyle     = src.fontStyle;
-      tb.uppercase     = src.uppercase;
-      tb.color         = src.color;
-      tb.opacity       = src.opacity;
-      tb.lineHeight    = src.lineHeight;
-      tb.letterSpacing = src.letterSpacing;
-      tb.align         = src.align;
-      tb.x             = src.x;
-      tb.y             = src.y;
-      tb.width         = src.width;
-      // Effects
-      tb.shadowOn      = src.shadowOn;
-      tb.shadowColor   = src.shadowColor;
-      tb.shadowOpacity = src.shadowOpacity;
-      tb.shadowX       = src.shadowX;
-      tb.shadowY       = src.shadowY;
-      tb.shadowBlur    = src.shadowBlur;
-      tb.strokeOn      = src.strokeOn;
-      tb.strokeColor   = src.strokeColor;
-      tb.strokeWidth   = src.strokeWidth;
+    // Build new text blocks: one per source block, preserving existing text by index
+    slide.textBlocks = srcBlocks.map((src, bi) => {
+      const existingText = (slide.textBlocks[bi] && slide.textBlocks[bi].text) || src.text;
+      return {
+        ...src,
+        text: existingText,
+        id: slide.textBlocks[bi] ? slide.textBlocks[bi].id : (Date.now() + si * 100 + bi),
+      };
     });
   });
   updateThumbs();
@@ -2007,6 +2226,7 @@ function setBgImage(event) {
       slides[currentSlideIdx].bgImageFit = document.getElementById('bg-image-fit').value;
       slides[currentSlideIdx].bgImageX = 0;
       slides[currentSlideIdx].bgImageY = 0;
+      slides[currentSlideIdx].bgImageScale = 100;
       bgType = 'image';
       document.getElementById('bg-image-preview').style.display = '';
       document.getElementById('bg-img-thumb').src = dataURL;
@@ -2014,6 +2234,9 @@ function setBgImage(event) {
       document.getElementById('bg-img-y').value = 0;
       document.getElementById('bg-img-x-val').textContent = '0';
       document.getElementById('bg-img-y-val').textContent = '0';
+      document.getElementById('bg-img-scale').value = 100;
+      document.getElementById('bg-img-scale-val').textContent = '100%';
+      document.getElementById('bg-img-bgcolor').value = slides[currentSlideIdx].bgColor || '#1a1a2e';
       document.getElementById('bg-image-offset-rows').style.display = '';
       renderCurrent();
       scheduleSave();
@@ -2050,8 +2273,17 @@ function updateBgImageFit() {
 function updateBgImageOffset() {
   if (!slides.length) return;
   pushUndoDebounced();
-  slides[currentSlideIdx].bgImageX = parseInt(document.getElementById('bg-img-x').value) || 0;
-  slides[currentSlideIdx].bgImageY = parseInt(document.getElementById('bg-img-y').value) || 0;
+  const s = slides[currentSlideIdx];
+  s.bgImageX = parseInt(document.getElementById('bg-img-x').value) || 0;
+  s.bgImageY = parseInt(document.getElementById('bg-img-y').value) || 0;
+  s.bgImageScale = parseInt(document.getElementById('bg-img-scale').value) || 100;
+  renderCurrent();
+}
+
+function updateBgImgColor() {
+  if (!slides.length) return;
+  pushUndoDebounced();
+  slides[currentSlideIdx].bgColor = document.getElementById('bg-img-bgcolor').value;
   renderCurrent();
 }
 
@@ -2077,10 +2309,11 @@ function applyBgToAll() {
     slide.gradC1    = s.gradC1;
     slide.gradC2    = s.gradC2;
     slide.gradAngle = s.gradAngle;
-    slide.bgImage    = s.bgImage;
-    slide.bgImageFit = s.bgImageFit;
-    slide.bgImageX   = s.bgImageX;
-    slide.bgImageY   = s.bgImageY;
+    slide.bgImage          = s.bgImage;
+    slide.bgImageFit       = s.bgImageFit;
+    slide.bgImageX         = s.bgImageX;
+    slide.bgImageY         = s.bgImageY;
+    slide.bgImageScale     = s.bgImageScale;
   });
   updateThumbs();
 }
@@ -2397,7 +2630,6 @@ async function doExport() {
     pb.style.width = ((i + 1) / slides.length * 100) + '%';
     status.textContent = `Rendering slide ${i + 1} of ${slides.length}…`;
     const filename = `${prefix}-${String(i + 1).padStart(2, '0')}.png`;
-    // Convert dataURL to base64 string for JSZip
     const dataURL = off.toDataURL('image/png');
     const base64 = dataURL.split(',')[1];
     zip.file(filename, base64, { base64: true });
