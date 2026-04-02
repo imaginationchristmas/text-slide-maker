@@ -1,0 +1,1993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Slide Maker by NOICE</title>
+<style>
+/* ─── Reset & Root ──────────────────────────────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg:        #0f0f0f;
+  --panel:     #161616;
+  --panel2:    #1c1c1c;
+  --panel3:    #222222;
+  --border:    rgba(255,255,255,0.08);
+  --border2:   rgba(255,255,255,0.14);
+  --text:      #e8e8e8;
+  --text2:     #888;
+  --text3:     #555;
+  --accent:    #c8ff00;
+  --accent2:   #7c4dff;
+  --danger:    rgba(220,50,50,0.15);
+  --danger-border: rgba(220,50,50,0.3);
+  --danger-text: #f77;
+  --sidebar:   280px;
+  --toolbar:   52px;
+  --radius:    6px;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ─── Scrollbars ────────────────────────────────────────────────────────────── */
+* { scrollbar-width: thin; scrollbar-color: var(--border2) transparent; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ─── Loading Screen ────────────────────────────────────────────────────────── */
+#loading-screen {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px; z-index: 9999;
+}
+#loading-screen h1 {
+  font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: var(--accent);
+}
+#loading-screen p { font-size: 12px; color: var(--text2); }
+.loading-dots { display: flex; gap: 6px; }
+.loading-dots span {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dot-pulse {
+  0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+/* ─── Toolbar ───────────────────────────────────────────────────────────────── */
+#toolbar {
+  height: var(--toolbar);
+  min-height: var(--toolbar);
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+#toolbar h1 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+  margin-right: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.tb-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border2);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.tb-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.tb-btn:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.22); }
+.tb-btn.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+.tb-btn.primary:hover { background: #d4ff33; }
+.tb-btn.danger { background: var(--danger); border-color: var(--danger-border); color: var(--danger-text); }
+.tb-btn.purple { border-color: rgba(124,77,255,0.4); color: #b39ddb; }
+.tb-btn.purple:hover { background: rgba(124,77,255,0.1); border-color: rgba(124,77,255,0.6); }
+
+#slide-count {
+  font-size: 11px;
+  color: var(--text3);
+  margin-left: auto;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ─── Main Layout ───────────────────────────────────────────────────────────── */
+#main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ─── Left Panel — Slides ───────────────────────────────────────────────────── */
+#slides-panel {
+  width: var(--sidebar);
+  min-width: var(--sidebar);
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+#slides-header {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+#slides-header span {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.add-slide-btn {
+  width: 22px; height: 22px;
+  border-radius: 5px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+  transition: all 0.15s;
+}
+.add-slide-btn:hover { background: rgba(200,255,0,0.1); border-color: var(--accent); color: var(--accent); }
+
+#slides-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.slide-thumb {
+  border-radius: 7px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  aspect-ratio: 1 / 1;
+  background: #111;
+}
+.slide-thumb:hover { border-color: rgba(255,255,255,0.2); }
+.slide-thumb.active { border-color: var(--accent); }
+.slide-thumb canvas { width: 100%; height: 100%; display: block; border-radius: 5px; }
+
+.slide-num {
+  position: absolute; bottom: 4px; left: 5px;
+  font-size: 9px; font-weight: 600; color: rgba(255,255,255,0.6);
+  background: rgba(0,0,0,0.55); padding: 1px 4px; border-radius: 3px;
+  pointer-events: none;
+}
+
+.slide-del {
+  position: absolute; top: 4px; right: 4px;
+  width: 16px; height: 16px; border-radius: 3px;
+  background: rgba(0,0,0,0.65); border: none;
+  color: var(--danger-text); font-size: 10px; cursor: pointer;
+  display: none; align-items: center; justify-content: center;
+  transition: background 0.12s;
+}
+.slide-del:hover { background: rgba(220,50,50,0.5); }
+.slide-thumb:hover .slide-del { display: flex; }
+
+/* ─── Center — Canvas Area ──────────────────────────────────────────────────── */
+#canvas-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: repeating-conic-gradient(#1a1a1a 0% 25%, #171717 0% 50%) 0 0 / 22px 22px;
+  overflow: hidden;
+  position: relative;
+  padding: 16px 24px 12px;
+  gap: 0;
+}
+
+/* Size switcher bar */
+#size-bar {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.size-btn {
+  display: flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border2);
+  background: var(--panel);
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 11px; font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.size-btn:hover { border-color: rgba(255,255,255,0.22); color: var(--text); }
+.size-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(200,255,0,0.07); }
+
+.sz-icon {
+  display: inline-block;
+  width: 12px;
+  background: currentColor;
+  border-radius: 2px;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+.size-btn.active .sz-icon { opacity: 1; }
+.sz-dim { font-size: 9px; opacity: 0.55; margin-left: 1px; }
+
+/* Canvas wrapper */
+#canvas-wrap {
+  position: relative;
+  box-shadow: 0 20px 70px rgba(0,0,0,0.65);
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+#main-canvas { display: block; }
+#canvas-overlay {
+  position: absolute; inset: 0;
+  cursor: default;
+}
+
+#canvas-size-label {
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--text3);
+  letter-spacing: 0.04em;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* ─── Right Panel — Controls ────────────────────────────────────────────────── */
+#controls-panel {
+  width: var(--sidebar);
+  min-width: var(--sidebar);
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.ctrl-section {
+  border-bottom: 1px solid var(--border);
+  padding: 12px;
+}
+
+.ctrl-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+  display: block;
+}
+
+.ctrl-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+}
+.ctrl-row:last-child { margin-bottom: 0; }
+
+.small-label {
+  font-size: 11px;
+  color: var(--text2);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Inputs */
+input[type=text], input[type=number], textarea, select {
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  outline: none;
+  transition: border 0.15s;
+  width: 100%;
+}
+input[type=text]:focus, input[type=number]:focus, textarea:focus, select:focus {
+  border-color: rgba(200,255,0,0.4);
+}
+textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+select option { background: var(--panel2); }
+input[type=number] { width: 64px; }
+
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%; height: 3px;
+  background: var(--border2);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+input[type=color] {
+  width: 30px; height: 30px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border2);
+  background: none;
+  cursor: pointer;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+/* Color presets */
+.color-presets { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.color-preset {
+  width: 24px; height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.12s;
+  flex-shrink: 0;
+}
+.color-preset:hover, .color-preset.active {
+  border-color: rgba(255,255,255,0.65);
+  transform: scale(1.1);
+}
+
+/* BG type tabs */
+.bg-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+.bg-tab {
+  flex: 1; height: 26px;
+  border-radius: 5px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.bg-tab.active { background: rgba(200,255,0,0.12); border-color: var(--accent); color: var(--accent); }
+
+/* Gradient presets */
+.grad-presets { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+.grad-preset {
+  height: 24px; border-radius: 4px;
+  cursor: pointer; border: 2px solid transparent;
+  transition: all 0.12s; flex: 1; min-width: 48px;
+}
+.grad-preset:hover, .grad-preset.active { border-color: rgba(255,255,255,0.6); }
+
+/* Apply-to-all button */
+.apply-all-btn {
+  width: 100%; height: 28px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border2);
+  background: rgba(124,77,255,0.08);
+  color: #b39ddb;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-top: 6px;
+}
+.apply-all-btn:hover { background: rgba(124,77,255,0.18); border-color: #7c4dff; }
+
+/* Text blocks list */
+#text-blocks-list { display: flex; flex-direction: column; gap: 5px; }
+.text-block-item {
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 7px 9px;
+  cursor: pointer;
+  transition: all 0.12s;
+  position: relative;
+}
+.text-block-item.active { border-color: var(--accent); }
+.text-block-item:hover { border-color: rgba(255,255,255,0.2); }
+.tbi-label { font-size: 10px; color: var(--text2); margin-bottom: 2px; }
+.tbi-preview {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 210px;
+  color: var(--text);
+}
+.tbi-del {
+  position: absolute; top: 5px; right: 7px;
+  background: none; border: none;
+  color: var(--text3); font-size: 13px; cursor: pointer;
+  line-height: 1;
+}
+.tbi-del:hover { color: var(--danger-text); }
+
+.add-text-btn {
+  width: 100%; height: 30px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--border2);
+  background: transparent;
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-top: 5px;
+}
+.add-text-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(200,255,0,0.04); }
+
+/* Alignment buttons */
+.align-btns { display: flex; gap: 4px; flex: 1; }
+.align-btn {
+  flex: 1; height: 26px;
+  border-radius: 4px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--text2);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.align-btn.active, .align-btn:hover {
+  background: rgba(200,255,0,0.12);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Position grid */
+.pos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.pos-field label { font-size: 10px; color: var(--text2); display: block; margin-bottom: 2px; }
+.pos-field input { width: 100%; }
+
+.snap-btns { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 7px; }
+.snap-btn {
+  height: 24px; padding: 0 7px;
+  border-radius: 4px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.snap-btn:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.2); color: var(--text); }
+
+/* Font controls */
+.font-weight-row { display: flex; gap: 5px; }
+.font-weight-row select { flex: 1; }
+
+/* ─── Animation Preview Overlay ─────────────────────────────────────────────── */
+#anim-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.88);
+  z-index: 100;
+  align-items: center; justify-content: center;
+  flex-direction: column; gap: 18px;
+}
+#anim-overlay.show { display: flex; }
+#anim-canvas { border-radius: 3px; box-shadow: 0 20px 60px rgba(0,0,0,0.8); }
+#anim-controls { display: flex; gap: 8px; }
+#anim-info { color: var(--text2); font-size: 12px; }
+
+/* ─── Export Modal ───────────────────────────────────────────────────────────── */
+#export-modal {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.78);
+  z-index: 99;
+  align-items: center; justify-content: center;
+}
+#export-modal.show { display: flex; }
+#export-box {
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  padding: 22px;
+  width: 360px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+#export-box h3 { font-size: 15px; font-weight: 700; }
+#export-box p { font-size: 12px; color: var(--text2); line-height: 1.6; }
+
+.export-fmt-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; }
+.export-fmt {
+  border: 1.5px solid var(--border2);
+  border-radius: 7px;
+  padding: 9px 7px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  background: var(--panel2);
+}
+.export-fmt:hover { border-color: rgba(255,255,255,0.25); }
+.export-fmt.active { border-color: var(--accent); background: rgba(200,255,0,0.05); }
+.fmt-icon {
+  width: 100%; max-width: 48px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+}
+.fmt-icon span { font-size: 9px; color: var(--text2); font-weight: 600; padding: 3px 0; }
+.export-fmt.active .fmt-icon { background: rgba(200,255,0,0.15); }
+.export-fmt.active .fmt-icon span { color: var(--accent); }
+.fmt-name { font-size: 11px; font-weight: 600; color: var(--text); }
+.fmt-dim { font-size: 9px; color: var(--text3); }
+
+.progress-bar-wrap { height: 3px; background: var(--border2); border-radius: 2px; overflow: hidden; }
+.progress-bar { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.2s; width: 0%; }
+
+/* ─── Bulk Import Modal ──────────────────────────────────────────────────────── */
+#bulk-modal {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 99;
+  align-items: center; justify-content: center;
+}
+#bulk-modal.show { display: flex; }
+#bulk-box {
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  border-radius: 14px;
+  width: 660px; max-width: 95vw; max-height: 90vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+#bulk-box h3 { font-size: 16px; font-weight: 700; color: var(--accent); }
+.bulk-hint {
+  background: rgba(200,255,0,0.05);
+  border: 1px solid rgba(200,255,0,0.15);
+  border-radius: 7px;
+  padding: 10px 12px;
+  font-size: 11px; line-height: 1.9;
+  color: var(--text2);
+  font-family: 'IBM Plex Mono', monospace;
+  white-space: pre;
+}
+#bulk-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.bulk-chip {
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+  padding: 4px 9px;
+  font-size: 11px; color: var(--text2);
+  display: flex; align-items: center; gap: 5px;
+  max-width: 190px;
+}
+.bulk-chip-num {
+  background: rgba(200,255,0,0.15);
+  color: var(--accent);
+  font-size: 9px; font-weight: 700;
+  padding: 1px 4px; border-radius: 3px;
+  flex-shrink: 0;
+}
+.bulk-chip-text {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ─── Empty State ────────────────────────────────────────────────────────────── */
+#empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; color: var(--text3); pointer-events: none;
+}
+#empty-state p { font-size: 13px; }
+
+</style>
+</head>
+<body>
+
+<!-- Loading Screen -->
+<div id="loading-screen">
+  <h1>SLIDE MAKER</h1>
+  <div class="loading-dots"><span></span><span></span><span></span></div>
+  <p>Loading fonts…</p>
+</div>
+
+<!-- Toolbar -->
+<div id="toolbar">
+  <h1>SLIDE MAKER</h1>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="addSlide()">+ New Slide</button>
+  <button class="tb-btn" onclick="duplicateSlide()">Duplicate</button>
+  <button class="tb-btn purple" onclick="showBulkImport()">✍ Write Slides</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="showAnimPreview()">▶ Preview</button>
+  <button class="tb-btn primary" onclick="showExport()">↓ Export</button>
+  <span id="slide-count">0 slides</span>
+</div>
+
+<div id="main">
+
+  <!-- Left: Slide List -->
+  <div id="slides-panel">
+    <div id="slides-header">
+      <span>Slides</span>
+      <button class="add-slide-btn" onclick="addSlide()" title="Add slide">+</button>
+    </div>
+    <div id="slides-list"></div>
+  </div>
+
+  <!-- Center: Canvas -->
+  <div id="canvas-area">
+    <div id="size-bar">
+      <button class="size-btn active" id="sz-square" onclick="setPreviewSize('square')">
+        <span class="sz-icon" style="aspect-ratio:1/1;height:12px;"></span>
+        Square<span class="sz-dim">1080×1080</span>
+      </button>
+      <button class="size-btn" id="sz-portrait" onclick="setPreviewSize('portrait')">
+        <span class="sz-icon" style="aspect-ratio:4/5;height:14px;"></span>
+        Portrait<span class="sz-dim">1080×1350</span>
+      </button>
+      <button class="size-btn" id="sz-story" onclick="setPreviewSize('story')">
+        <span class="sz-icon" style="aspect-ratio:9/16;height:16px;"></span>
+        Story<span class="sz-dim">1080×1920</span>
+      </button>
+    </div>
+    <div id="canvas-wrap">
+      <canvas id="main-canvas" width="1080" height="1080"></canvas>
+      <div id="canvas-overlay"></div>
+    </div>
+    <div id="canvas-size-label">1080 × 1080 · Square</div>
+  </div>
+
+  <!-- Right: Controls -->
+  <div id="controls-panel">
+
+    <!-- Background -->
+    <div class="ctrl-section">
+      <span class="ctrl-label">Background</span>
+      <div class="bg-tabs">
+        <button class="bg-tab active" id="bg-solid-tab" onclick="setBgType('solid')">Solid</button>
+        <button class="bg-tab" id="bg-grad-tab" onclick="setBgType('gradient')">Gradient</button>
+      </div>
+
+      <div id="bg-solid-ctrl">
+        <div class="ctrl-row">
+          <input type="color" id="bg-color" value="#1a1a2e" oninput="updateBg()">
+          <span class="small-label">Background color</span>
+        </div>
+        <div class="color-presets" id="bg-presets"></div>
+      </div>
+
+      <div id="bg-grad-ctrl" style="display:none">
+        <div class="ctrl-row">
+          <input type="color" id="grad-c1" value="#1a1a2e" oninput="updateBg()">
+          <span class="small-label">From</span>
+          <input type="color" id="grad-c2" value="#4a0072" oninput="updateBg()">
+          <span class="small-label">To</span>
+        </div>
+        <div class="ctrl-row">
+          <span class="small-label">Angle</span>
+          <input type="range" min="0" max="360" value="135" id="grad-angle"
+            oninput="updateBg(); document.getElementById('grad-angle-val').textContent=this.value+'°'">
+          <span class="small-label" id="grad-angle-val">135°</span>
+        </div>
+        <div class="grad-presets" id="grad-presets"></div>
+      </div>
+
+      <button class="apply-all-btn" onclick="applyBgToAll()">Apply background to all slides</button>
+    </div>
+
+    <!-- Text Blocks -->
+    <div class="ctrl-section">
+      <span class="ctrl-label">Text Blocks</span>
+      <div id="text-blocks-list"></div>
+      <button class="add-text-btn" onclick="addTextBlock()">+ Add Text Block</button>
+    </div>
+
+    <!-- Text Content (shown when block selected) -->
+    <div class="ctrl-section" id="text-editor" style="display:none">
+      <span class="ctrl-label">Text Content</span>
+      <textarea id="text-content" placeholder="Type your text…" oninput="updateTextBlock()"></textarea>
+    </div>
+
+    <!-- Font Controls (shown when block selected) -->
+    <div class="ctrl-section" id="font-controls" style="display:none">
+      <span class="ctrl-label">Font</span>
+      <div class="ctrl-row">
+        <select id="font-family" onchange="onFontFamilyChange()" style="flex:1;"></select>
+      </div>
+      <div class="ctrl-row font-weight-row">
+        <select id="font-weight" onchange="updateTextBlock()" style="flex:1;"></select>
+        <select id="font-style" onchange="updateTextBlock()" style="width:90px;">
+          <option value="normal">Normal</option>
+          <option value="italic">Italic</option>
+        </select>
+      </div>
+      <div class="ctrl-row">
+        <span class="small-label">Size</span>
+        <input type="range" min="10" max="300" value="80" id="font-size"
+          oninput="updateTextBlock(); document.getElementById('font-size-num').value=this.value"
+          style="flex:1;">
+        <input type="number" id="font-size-num" value="80" min="10" max="300"
+          oninput="document.getElementById('font-size').value=this.value; updateTextBlock()"
+          style="width:56px;">
+      </div>
+      <div class="ctrl-row">
+        <span class="small-label">Leading</span>
+        <input type="range" min="0.7" max="2.5" step="0.05" value="1.2" id="line-height"
+          oninput="updateTextBlock(); document.getElementById('lh-val').textContent=parseFloat(this.value).toFixed(2)">
+        <span class="small-label" id="lh-val">1.20</span>
+      </div>
+      <div class="ctrl-row">
+        <span class="small-label">Tracking</span>
+        <input type="range" min="-10" max="40" step="0.5" value="0" id="letter-spacing"
+          oninput="updateTextBlock(); document.getElementById('ls-val').textContent=parseFloat(this.value).toFixed(1)">
+        <span class="small-label" id="ls-val">0.0</span>
+      </div>
+    </div>
+
+    <!-- Text Color (shown when block selected) -->
+    <div class="ctrl-section" id="color-controls" style="display:none">
+      <span class="ctrl-label">Text Color</span>
+      <div class="ctrl-row">
+        <input type="color" id="text-color" value="#ffffff" oninput="updateTextBlock()">
+        <span class="small-label">Color</span>
+        <input type="range" min="0" max="100" value="100" id="text-opacity"
+          oninput="updateTextBlock(); document.getElementById('op-val').textContent=this.value+'%'">
+        <span class="small-label" id="op-val">100%</span>
+      </div>
+      <div class="color-presets" id="text-color-presets"></div>
+    </div>
+
+    <!-- Alignment (shown when block selected) -->
+    <div class="ctrl-section" id="align-controls" style="display:none">
+      <span class="ctrl-label">Alignment</span>
+      <div class="ctrl-row">
+        <div class="align-btns">
+          <button class="align-btn active" id="align-left" onclick="setAlign('left')">Left</button>
+          <button class="align-btn" id="align-center" onclick="setAlign('center')">Center</button>
+          <button class="align-btn" id="align-right" onclick="setAlign('right')">Right</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Position (shown when block selected) -->
+    <div class="ctrl-section" id="pos-controls" style="display:none">
+      <span class="ctrl-label">Position</span>
+      <div class="pos-grid">
+        <div class="pos-field">
+          <label>X (px)</label>
+          <input type="number" id="pos-x" value="80" oninput="updatePosFromInput()">
+        </div>
+        <div class="pos-field">
+          <label>Y (px)</label>
+          <input type="number" id="pos-y" value="400" oninput="updatePosFromInput()">
+        </div>
+        <div class="pos-field">
+          <label>Width (px)</label>
+          <input type="number" id="pos-w" value="920" oninput="updatePosFromInput()">
+        </div>
+      </div>
+      <div class="snap-btns">
+        <button class="snap-btn" onclick="snapPos('left')">⟵ Left</button>
+        <button class="snap-btn" onclick="snapPos('center-h')">↔ H Center</button>
+        <button class="snap-btn" onclick="snapPos('right')">Right ⟶</button>
+        <button class="snap-btn" onclick="snapPos('top')">↑ Top</button>
+        <button class="snap-btn" onclick="snapPos('center-v')">↕ V Center</button>
+        <button class="snap-btn" onclick="snapPos('bottom')">↓ Bottom</button>
+      </div>
+      <button class="apply-all-btn" onclick="applyFormatToAll()">Apply text format to all slides</button>
+    </div>
+
+  </div><!-- /controls-panel -->
+</div><!-- /main -->
+
+<!-- Bulk Import Modal -->
+<div id="bulk-modal" onclick="if(event.target===this)closeBulkImport()">
+  <div id="bulk-box">
+    <div style="padding:18px 22px 0; border-bottom:1px solid var(--border); padding-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+        <h3>Write Slides</h3>
+        <button onclick="closeBulkImport()" style="background:none;border:none;color:var(--text2);font-size:17px;cursor:pointer;line-height:1;">✕</button>
+      </div>
+      <p style="font-size:12px;color:var(--text2);line-height:1.6;">
+        Type or paste your text below. Use <code style="background:var(--panel2);padding:1px 5px;border-radius:3px;font-size:11px;color:var(--accent);">---</code> on its own line to break to the next slide.
+      </p>
+    </div>
+    <div style="padding:12px 22px 0;">
+      <div class="bulk-hint">Slide one text here
+---
+Slide two text here
+It can span multiple lines
+---
+And this becomes slide three</div>
+    </div>
+    <div style="padding:12px 22px;flex:1;display:flex;flex-direction:column;gap:9px;overflow-y:auto;">
+      <textarea id="bulk-input" placeholder="Start writing… use --- to break to next slide"
+        style="flex:1;min-height:200px;resize:none;font-size:13px;line-height:1.8;font-family:inherit;background:var(--panel2);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:12px;outline:none;"
+        oninput="updateBulkPreview()"></textarea>
+      <div>
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">
+          Preview — <span id="bulk-slide-count" style="color:var(--text2);">0 slides</span>
+        </div>
+        <div id="bulk-chips"></div>
+      </div>
+    </div>
+    <div style="padding:12px 22px 18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer;">
+          <input type="checkbox" id="bulk-append" style="accent-color:var(--accent);">
+          Append to existing slides
+        </label>
+        <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer;">
+          <input type="checkbox" id="bulk-inherit" checked style="accent-color:var(--accent);">
+          Inherit current style
+        </label>
+      </div>
+      <div style="display:flex;gap:7px;">
+        <button class="tb-btn primary" onclick="doBulkImport()" style="flex:1;justify-content:center;height:34px;font-size:13px;">Generate Slides</button>
+        <button class="tb-btn" onclick="closeBulkImport()" style="height:34px;">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Animation Preview Overlay -->
+<div id="anim-overlay" onclick="if(event.target===this)closeAnim()">
+  <canvas id="anim-canvas" width="540" height="540"></canvas>
+  <div id="anim-controls">
+    <button class="tb-btn" onclick="animPrev()">‹ Prev</button>
+    <button class="tb-btn" onclick="toggleAnimPlay()" id="play-btn">▶ Play</button>
+    <button class="tb-btn" onclick="animNext()">Next ›</button>
+    <button class="tb-btn danger" onclick="closeAnim()">✕ Close</button>
+  </div>
+  <div id="anim-info"></div>
+</div>
+
+<!-- Export Modal -->
+<div id="export-modal" onclick="if(event.target===this)closeExport()">
+  <div id="export-box">
+    <h3>Export Slides</h3>
+    <p>Choose a format — your text and layout will be scaled to fit each size automatically.</p>
+    <div class="export-fmt-grid">
+      <div class="export-fmt active" id="fmt-square" onclick="selectFmt('square')">
+        <div class="fmt-icon" style="aspect-ratio:1/1;"><span>1:1</span></div>
+        <div class="fmt-name">Square</div>
+        <div class="fmt-dim">1080 × 1080</div>
+      </div>
+      <div class="export-fmt" id="fmt-portrait" onclick="selectFmt('portrait')">
+        <div class="fmt-icon" style="aspect-ratio:4/5;"><span>4:5</span></div>
+        <div class="fmt-name">Portrait</div>
+        <div class="fmt-dim">1080 × 1350</div>
+      </div>
+      <div class="export-fmt" id="fmt-story" onclick="selectFmt('story')">
+        <div class="fmt-icon" style="aspect-ratio:9/16;"><span>9:16</span></div>
+        <div class="fmt-name">Story</div>
+        <div class="fmt-dim">1080 × 1920</div>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px;">Filename prefix</div>
+      <input type="text" id="export-prefix" value="slide" placeholder="e.g. my-post">
+    </div>
+    <div id="export-progress" style="display:none;flex-direction:column;gap:7px;">
+      <div class="progress-bar-wrap"><div class="progress-bar" id="pb"></div></div>
+      <span id="export-status" style="font-size:11px;color:var(--text2);">Exporting…</span>
+    </div>
+    <div style="display:flex;gap:7px;">
+      <button class="tb-btn primary" onclick="doExport()" style="flex:1;justify-content:center;">Export All PNGs</button>
+      <button class="tb-btn" onclick="closeExport()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── FONT REGISTRY ────────────────────────────────────────────────────────────
+// Maps font families to their file variants. Weights: 100-900. Style: normal|italic.
+// Files are relative to the docs/ directory.
+
+const FONT_REGISTRY = [
+  {
+    family: 'Alaska Beta',
+    category: 'sans-serif',
+    variants: [
+      { file: 'fonts/Alaska/AlaskaBeta-CondensedLight.otf',    weight: 300, style: 'normal', label: 'Condensed Light' },
+      { file: 'fonts/Alaska/AlaskaBeta-CondExtLtContrast.otf', weight: 200, style: 'normal', label: 'Ext Light Contrast' },
+      { file: 'fonts/Alaska/AlaskaBeta-CondLightContrast.otf', weight: 300, style: 'normal', label: 'Light Contrast' },
+    ]
+  },
+  {
+    family: 'Apfel Grotezk',
+    category: 'sans-serif',
+    variants: [
+      { file: 'fonts/Apfel/ApfelGrotezk-Regular.otf', weight: 400, style: 'normal', label: 'Regular' },
+    ]
+  },
+  {
+    family: 'IBM Plex Mono',
+    category: 'monospace',
+    variants: [
+      { file: 'fonts/IBM/IBMPlexMono-Regular.ttf', weight: 400, style: 'normal', label: 'Regular' },
+    ]
+  },
+  {
+    family: 'IBM Plex Sans',
+    category: 'sans-serif',
+    variants: [
+      { file: 'fonts/IBM/IBMPlexSans-ExtraLight.ttf', weight: 200, style: 'normal', label: 'ExtraLight' },
+      { file: 'fonts/IBM/IBMPlexSans-Light.ttf',      weight: 300, style: 'normal', label: 'Light' },
+      { file: 'fonts/IBM/IBMPlexSans-Medium.ttf',     weight: 500, style: 'normal', label: 'Medium' },
+      { file: 'fonts/IBM/IBMPlexSans-SemiBold.ttf',   weight: 600, style: 'normal', label: 'SemiBold' },
+    ]
+  },
+  {
+    family: 'Neue Haas Display',
+    category: 'sans-serif',
+    variants: [
+      { file: 'fonts/NeueHaas/55Rg.ttf', weight: 400, style: 'normal', label: 'Regular' },
+      { file: 'fonts/NeueHaas/65Md.ttf', weight: 500, style: 'normal', label: 'Medium' },
+      { file: 'fonts/NeueHaas/75Bd.ttf', weight: 700, style: 'normal', label: 'Bold' },
+    ]
+  },
+  {
+    family: 'Proxima Nova',
+    category: 'sans-serif',
+    variants: [
+      { file: 'fonts/ProximaNova/ProximaNova Light.otf',    weight: 300, style: 'normal', label: 'Light' },
+      { file: 'fonts/ProximaNova/ProximaNova Regular.otf',  weight: 400, style: 'normal', label: 'Regular' },
+      { file: 'fonts/ProximaNova/ProximaNova Semibold.otf', weight: 600, style: 'normal', label: 'Semibold' },
+      { file: 'fonts/ProximaNova/ProximaNova Bold.otf',     weight: 700, style: 'normal', label: 'Bold' },
+    ]
+  },
+];
+
+// ─── EXPORT FORMATS ───────────────────────────────────────────────────────────
+
+const CANVAS_SIZE = 1080;
+
+const EXPORT_FORMATS = {
+  square:   { w: 1080, h: 1080,  label: '1080×1080', name: 'Square' },
+  portrait: { w: 1080, h: 1350,  label: '1080×1350', name: 'Portrait' },
+  story:    { w: 1080, h: 1920,  label: '1080×1920', name: 'Story' },
+};
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+
+let slides = [];
+let currentSlideIdx = 0;
+let selectedTextIdx = null;
+let bgType = 'solid';
+let previewSize = 'square';
+let selectedFmt = 'square';
+let scale = 1;
+
+// Drag state
+let dragging = false;
+let dragOffX = 0, dragOffY = 0;
+
+// Animation state
+let animIdx = 0;
+let animPlaying = false;
+let animTimer = null;
+
+// ─── SLIDE & TEXT BLOCK FACTORIES ─────────────────────────────────────────────
+
+function makeSlide() {
+  return {
+    bgType: 'solid',
+    bgColor: '#1a1a2e',
+    gradC1: '#1a1a2e',
+    gradC2: '#4a0072',
+    gradAngle: 135,
+    textBlocks: []
+  };
+}
+
+function makeTextBlock() {
+  // Use the first available font family as default
+  const defaultFamily = FONT_REGISTRY.length > 0 ? FONT_REGISTRY[0].family : 'sans-serif';
+  const defaultVariant = FONT_REGISTRY.length > 0 ? FONT_REGISTRY[0].variants[0] : { weight: 400, style: 'normal' };
+  return {
+    text: 'Your text here',
+    fontFamily: defaultFamily,
+    fontSize: 80,
+    fontWeight: String(defaultVariant.weight),
+    fontStyle: defaultVariant.style,
+    color: '#ffffff',
+    opacity: 100,
+    align: 'center',
+    lineHeight: 1.2,
+    letterSpacing: 0,
+    x: 80,
+    y: 400,
+    width: 920
+  };
+}
+
+// ─── FONT LOADING ─────────────────────────────────────────────────────────────
+
+async function loadFonts() {
+  const promises = [];
+  for (const family of FONT_REGISTRY) {
+    for (const v of family.variants) {
+      const face = new FontFace(family.family, `url('${v.file}')`, {
+        weight: String(v.weight),
+        style: v.style
+      });
+      promises.push(
+        face.load().then(loaded => {
+          document.fonts.add(loaded);
+        }).catch(err => {
+          console.warn(`Failed to load font: ${family.family} ${v.label}`, err);
+        })
+      );
+    }
+  }
+  await Promise.allSettled(promises);
+}
+
+function buildFontFamilySelect() {
+  const sel = document.getElementById('font-family');
+  sel.innerHTML = '';
+  FONT_REGISTRY.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f.family;
+    opt.textContent = f.family;
+    sel.appendChild(opt);
+  });
+}
+
+function buildFontWeightSelect(familyName) {
+  const sel = document.getElementById('font-weight');
+  sel.innerHTML = '';
+  const family = FONT_REGISTRY.find(f => f.family === familyName);
+  if (!family) return;
+  // Deduplicate by weight (show each weight once)
+  const seen = new Set();
+  family.variants.forEach(v => {
+    const key = v.weight;
+    if (!seen.has(key)) {
+      seen.add(key);
+      const opt = document.createElement('option');
+      opt.value = String(v.weight);
+      opt.textContent = v.label || weightLabel(v.weight);
+      sel.appendChild(opt);
+    }
+  });
+}
+
+function weightLabel(w) {
+  const map = { 100:'Thin', 200:'ExtraLight', 300:'Light', 400:'Regular',
+                500:'Medium', 600:'SemiBold', 700:'Bold', 800:'ExtraBold', 900:'Black' };
+  return (map[w] || String(w)) + ' ' + w;
+}
+
+function onFontFamilyChange() {
+  const family = document.getElementById('font-family').value;
+  buildFontWeightSelect(family);
+  // Set weight to first available
+  const familyDef = FONT_REGISTRY.find(f => f.family === family);
+  if (familyDef && familyDef.variants.length > 0) {
+    document.getElementById('font-weight').value = String(familyDef.variants[0].weight);
+  }
+  updateTextBlock();
+}
+
+// ─── RENDERING ────────────────────────────────────────────────────────────────
+
+const mainCanvas = document.getElementById('main-canvas');
+const ctx = mainCanvas.getContext('2d');
+
+function renderSlideToSize(slide, targetW, targetH) {
+  const off = document.createElement('canvas');
+  off.width = targetW;
+  off.height = targetH;
+  const g = off.getContext('2d');
+
+  const scaleX = targetW / CANVAS_SIZE;
+  const scaleY = targetH / CANVAS_SIZE;
+
+  // Background
+  if (slide.bgType === 'gradient') {
+    const rad = (slide.gradAngle - 90) * Math.PI / 180;
+    const cx = targetW / 2, cy = targetH / 2;
+    const d = Math.sqrt(targetW * targetW + targetH * targetH) / 2;
+    const grd = g.createLinearGradient(
+      cx - Math.cos(rad) * d, cy - Math.sin(rad) * d,
+      cx + Math.cos(rad) * d, cy + Math.sin(rad) * d
+    );
+    grd.addColorStop(0, slide.gradC1);
+    grd.addColorStop(1, slide.gradC2);
+    g.fillStyle = grd;
+  } else {
+    g.fillStyle = slide.bgColor;
+  }
+  g.fillRect(0, 0, targetW, targetH);
+
+  // Text blocks — scale from 1080-space
+  slide.textBlocks.forEach(tb => {
+    const vOffset = (targetH - CANVAS_SIZE * scaleY) / 2;
+    const scaled = {
+      ...tb,
+      x: tb.x * scaleX,
+      y: tb.y * scaleY + vOffset,
+      width: tb.width * scaleX,
+      fontSize: tb.fontSize * scaleX,
+    };
+    renderTextBlock(g, scaled);
+  });
+
+  return off;
+}
+
+function renderTextBlock(g, tb) {
+  g.save();
+  g.globalAlpha = tb.opacity / 100;
+
+  const italic = tb.fontStyle === 'italic' ? 'italic ' : '';
+  g.font = `${italic}${tb.fontWeight} ${tb.fontSize}px '${tb.fontFamily}', sans-serif`;
+  g.fillStyle = tb.color;
+  g.textAlign = tb.align;
+  g.textBaseline = 'top';
+
+  const lines = wrapText(g, tb);
+  const lh = tb.fontSize * tb.lineHeight;
+
+  lines.forEach((line, li) => {
+    const y = tb.y + li * lh;
+    let x;
+    if (tb.align === 'left') x = tb.x;
+    else if (tb.align === 'right') x = tb.x + tb.width;
+    else x = tb.x + tb.width / 2;
+
+    if (tb.letterSpacing !== 0) {
+      drawWithSpacing(g, line, x, y, tb.align, tb.letterSpacing);
+    } else {
+      g.fillText(line, x, y);
+    }
+  });
+
+  g.restore();
+}
+
+function drawWithSpacing(g, text, x, y, align, spacing) {
+  const chars = [...text];
+  if (!chars.length) return;
+  let total = 0;
+  chars.forEach(ch => { total += g.measureText(ch).width + spacing; });
+  total -= spacing;
+  let cx;
+  if (align === 'left') cx = x;
+  else if (align === 'right') cx = x - total;
+  else cx = x - total / 2;
+  chars.forEach(ch => {
+    g.fillText(ch, cx, y);
+    cx += g.measureText(ch).width + spacing;
+  });
+}
+
+function wrapText(g, tb) {
+  const lines = [];
+  tb.text.split('\n').forEach(para => {
+    const words = para.split(' ');
+    let line = '';
+    words.forEach(w => {
+      const test = line ? line + ' ' + w : w;
+      if (g.measureText(test).width > tb.width && line) {
+        lines.push(line);
+        line = w;
+      } else {
+        line = test;
+      }
+    });
+    lines.push(line);
+  });
+  return lines;
+}
+
+function wrapTextSimple(tb) {
+  return tb.text.split('\n');
+}
+
+function renderCurrent() {
+  if (!slides.length) {
+    ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+    return;
+  }
+  const fmt = EXPORT_FORMATS[previewSize];
+  const off = renderSlideToSize(slides[currentSlideIdx], fmt.w, fmt.h);
+  ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+  ctx.drawImage(off, 0, 0);
+  updateThumbs();
+}
+
+// ─── PREVIEW SIZE ─────────────────────────────────────────────────────────────
+
+function setPreviewSize(key) {
+  previewSize = key;
+  selectedFmt = key;
+  Object.keys(EXPORT_FORMATS).forEach(k => {
+    document.getElementById('sz-' + k).classList.toggle('active', k === key);
+    const fmtEl = document.getElementById('fmt-' + k);
+    if (fmtEl) fmtEl.classList.toggle('active', k === key);
+  });
+  const fmt = EXPORT_FORMATS[key];
+  document.getElementById('canvas-size-label').textContent =
+    `${fmt.w} × ${fmt.h} · ${fmt.name}`;
+  mainCanvas.width  = fmt.w;
+  mainCanvas.height = fmt.h;
+  updateCanvasScale();
+  renderCurrent();
+}
+
+function updateCanvasScale() {
+  const fmt = EXPORT_FORMATS[previewSize];
+  const area = document.getElementById('canvas-area');
+  const aw = area.clientWidth  - 48;
+  const ah = area.clientHeight - 48 - 42 - 24; // padding + size-bar + label
+  scale = Math.min(aw / fmt.w, ah / fmt.h, 1);
+  const wrap = document.getElementById('canvas-wrap');
+  wrap.style.width  = (fmt.w * scale) + 'px';
+  wrap.style.height = (fmt.h * scale) + 'px';
+  mainCanvas.style.width  = (fmt.w * scale) + 'px';
+  mainCanvas.style.height = (fmt.h * scale) + 'px';
+}
+
+// ─── COORDINATE CONVERSION ────────────────────────────────────────────────────
+
+function screenToDesign(ex, ey) {
+  const fmt = EXPORT_FORMATS[previewSize];
+  const rect = mainCanvas.getBoundingClientRect();
+  const px = (ex - rect.left)  / scale;
+  const py = (ey - rect.top)   / scale;
+  const scaleX = fmt.w / CANVAS_SIZE;
+  const scaleY = fmt.h / CANVAS_SIZE;
+  const vOffset = (fmt.h - CANVAS_SIZE * scaleY) / 2;
+  return {
+    x: px / scaleX,
+    y: (py - vOffset) / scaleY
+  };
+}
+
+// ─── CANVAS DRAG ──────────────────────────────────────────────────────────────
+
+const overlay = document.getElementById('canvas-overlay');
+
+overlay.addEventListener('mousedown', e => {
+  if (!slides.length) return;
+  const slide = slides[currentSlideIdx];
+  const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
+
+  let hit = -1;
+  for (let i = slide.textBlocks.length - 1; i >= 0; i--) {
+    const tb = slide.textBlocks[i];
+    const lines = wrapTextSimple(tb);
+    const h = lines.length * tb.fontSize * tb.lineHeight + 20;
+    if (mx >= tb.x - 10 && mx <= tb.x + tb.width + 10 &&
+        my >= tb.y - 10 && my <= tb.y + h) {
+      hit = i; break;
+    }
+  }
+
+  if (hit >= 0) {
+    selectedTextIdx = hit;
+    dragging = true;
+    const tb = slide.textBlocks[hit];
+    dragOffX = mx - tb.x;
+    dragOffY = my - tb.y;
+    selectTextBlock(hit);
+    overlay.style.cursor = 'grabbing';
+  } else {
+    selectedTextIdx = null;
+    refreshTextPanel();
+    overlay.style.cursor = 'default';
+  }
+});
+
+window.addEventListener('mousemove', e => {
+  if (!dragging || selectedTextIdx === null) return;
+  const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
+  const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
+  tb.x = Math.round(mx - dragOffX);
+  tb.y = Math.round(my - dragOffY);
+  document.getElementById('pos-x').value = tb.x;
+  document.getElementById('pos-y').value = tb.y;
+  renderCurrent();
+});
+
+window.addEventListener('mouseup', () => {
+  dragging = false;
+  overlay.style.cursor = 'default';
+});
+
+// ─── SLIDES MANAGEMENT ────────────────────────────────────────────────────────
+
+function addSlide(copyFrom) {
+  const s = copyFrom ? JSON.parse(JSON.stringify(copyFrom)) : makeSlide();
+  slides.push(s);
+  currentSlideIdx = slides.length - 1;
+  selectedTextIdx = null;
+  refreshSlidePicker();
+  loadSlideToUI();
+  renderCurrent();
+}
+
+function duplicateSlide() {
+  if (!slides.length) return;
+  addSlide(slides[currentSlideIdx]);
+}
+
+function deleteSlide(i) {
+  if (slides.length <= 1) { alert('Cannot delete the last slide.'); return; }
+  slides.splice(i, 1);
+  currentSlideIdx = Math.min(currentSlideIdx, slides.length - 1);
+  selectedTextIdx = null;
+  refreshSlidePicker();
+  loadSlideToUI();
+  renderCurrent();
+}
+
+function selectSlide(i) {
+  currentSlideIdx = i;
+  selectedTextIdx = null;
+  refreshSlidePicker();
+  loadSlideToUI();
+  renderCurrent();
+}
+
+function refreshSlidePicker() {
+  const list = document.getElementById('slides-list');
+  list.innerHTML = '';
+  slides.forEach((s, i) => {
+    const div = document.createElement('div');
+    div.className = 'slide-thumb' + (i === currentSlideIdx ? ' active' : '');
+    div.innerHTML = `<canvas width="${CANVAS_SIZE}" height="${CANVAS_SIZE}"></canvas>
+      <span class="slide-num">${i + 1}</span>
+      <button class="slide-del" onclick="event.stopPropagation();deleteSlide(${i})" title="Delete slide">✕</button>`;
+    div.onclick = () => selectSlide(i);
+    list.appendChild(div);
+    // Render thumbnail at 1080×1080 (always square for the strip)
+    const thumbCanvas = div.querySelector('canvas');
+    const off = renderSlideToSize(s, CANVAS_SIZE, CANVAS_SIZE);
+    thumbCanvas.getContext('2d').drawImage(off, 0, 0);
+  });
+  document.getElementById('slide-count').textContent =
+    slides.length + (slides.length === 1 ? ' slide' : ' slides');
+}
+
+function updateThumbs() {
+  const thumbs = document.querySelectorAll('.slide-thumb');
+  thumbs.forEach((t, i) => {
+    if (!slides[i]) return;
+    const c = t.querySelector('canvas');
+    if (c) {
+      const off = renderSlideToSize(slides[i], CANVAS_SIZE, CANVAS_SIZE);
+      c.getContext('2d').drawImage(off, 0, 0);
+    }
+    t.className = 'slide-thumb' + (i === currentSlideIdx ? ' active' : '');
+  });
+}
+
+// ─── LOAD SLIDE → UI ──────────────────────────────────────────────────────────
+
+function loadSlideToUI() {
+  if (!slides.length) return;
+  const s = slides[currentSlideIdx];
+
+  bgType = s.bgType;
+  document.getElementById('bg-solid-tab').classList.toggle('active', bgType === 'solid');
+  document.getElementById('bg-grad-tab').classList.toggle('active', bgType === 'gradient');
+  document.getElementById('bg-solid-ctrl').style.display = bgType === 'solid' ? '' : 'none';
+  document.getElementById('bg-grad-ctrl').style.display  = bgType === 'gradient' ? '' : 'none';
+  document.getElementById('bg-color').value   = s.bgColor;
+  document.getElementById('grad-c1').value    = s.gradC1;
+  document.getElementById('grad-c2').value    = s.gradC2;
+  document.getElementById('grad-angle').value = s.gradAngle;
+  document.getElementById('grad-angle-val').textContent = s.gradAngle + '°';
+
+  refreshTextList();
+  refreshTextPanel();
+}
+
+// ─── TEXT BLOCKS ──────────────────────────────────────────────────────────────
+
+function addTextBlock() {
+  if (!slides.length) return;
+  const tb = makeTextBlock();
+  slides[currentSlideIdx].textBlocks.push(tb);
+  selectedTextIdx = slides[currentSlideIdx].textBlocks.length - 1;
+  refreshTextList();
+  selectTextBlock(selectedTextIdx);
+  renderCurrent();
+}
+
+function deleteTextBlock(i) {
+  slides[currentSlideIdx].textBlocks.splice(i, 1);
+  if (selectedTextIdx >= slides[currentSlideIdx].textBlocks.length)
+    selectedTextIdx = slides[currentSlideIdx].textBlocks.length - 1;
+  if (slides[currentSlideIdx].textBlocks.length === 0) selectedTextIdx = null;
+  refreshTextList();
+  refreshTextPanel();
+  renderCurrent();
+}
+
+function selectTextBlock(i) {
+  selectedTextIdx = i;
+  refreshTextList();
+  refreshTextPanel();
+}
+
+function refreshTextList() {
+  const list = document.getElementById('text-blocks-list');
+  list.innerHTML = '';
+  if (!slides.length) return;
+  slides[currentSlideIdx].textBlocks.forEach((tb, i) => {
+    const d = document.createElement('div');
+    d.className = 'text-block-item' + (i === selectedTextIdx ? ' active' : '');
+    d.innerHTML = `<div class="tbi-label">Block ${i + 1}</div>
+      <div class="tbi-preview">${tb.text.replace(/\n/g, ' ') || '(empty)'}</div>
+      <button class="tbi-del" onclick="event.stopPropagation();deleteTextBlock(${i})" title="Delete block">✕</button>`;
+    d.onclick = () => selectTextBlock(i);
+    list.appendChild(d);
+  });
+}
+
+function refreshTextPanel() {
+  const show = selectedTextIdx !== null &&
+    slides.length &&
+    slides[currentSlideIdx].textBlocks[selectedTextIdx];
+
+  ['text-editor','font-controls','color-controls','align-controls','pos-controls'].forEach(id => {
+    document.getElementById(id).style.display = show ? '' : 'none';
+  });
+  if (!show) return;
+
+  const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
+
+  document.getElementById('text-content').value = tb.text;
+
+  // Font family
+  document.getElementById('font-family').value = tb.fontFamily;
+  buildFontWeightSelect(tb.fontFamily);
+  document.getElementById('font-weight').value = tb.fontWeight;
+  document.getElementById('font-style').value  = tb.fontStyle;
+
+  // Size
+  document.getElementById('font-size').value     = tb.fontSize;
+  document.getElementById('font-size-num').value = tb.fontSize;
+
+  // Leading / tracking
+  document.getElementById('line-height').value = tb.lineHeight;
+  document.getElementById('lh-val').textContent = tb.lineHeight.toFixed(2);
+  document.getElementById('letter-spacing').value = tb.letterSpacing;
+  document.getElementById('ls-val').textContent = tb.letterSpacing.toFixed(1);
+
+  // Color / opacity
+  document.getElementById('text-color').value   = tb.color;
+  document.getElementById('text-opacity').value = tb.opacity;
+  document.getElementById('op-val').textContent = tb.opacity + '%';
+
+  // Alignment
+  ['left','center','right'].forEach(a => {
+    document.getElementById('align-' + a).classList.toggle('active', tb.align === a);
+  });
+
+  // Position
+  document.getElementById('pos-x').value = tb.x;
+  document.getElementById('pos-y').value = tb.y;
+  document.getElementById('pos-w').value = tb.width;
+}
+
+function updateTextBlock() {
+  if (selectedTextIdx === null || !slides.length) return;
+  const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
+  tb.text         = document.getElementById('text-content').value;
+  tb.fontFamily   = document.getElementById('font-family').value;
+  tb.fontWeight   = document.getElementById('font-weight').value;
+  tb.fontStyle    = document.getElementById('font-style').value;
+  tb.fontSize     = parseInt(document.getElementById('font-size').value);
+  tb.lineHeight   = parseFloat(document.getElementById('line-height').value);
+  tb.letterSpacing = parseFloat(document.getElementById('letter-spacing').value);
+  tb.color        = document.getElementById('text-color').value;
+  tb.opacity      = parseInt(document.getElementById('text-opacity').value);
+  refreshTextList();
+  renderCurrent();
+}
+
+function setAlign(a) {
+  if (selectedTextIdx === null || !slides.length) return;
+  slides[currentSlideIdx].textBlocks[selectedTextIdx].align = a;
+  ['left','center','right'].forEach(id => {
+    document.getElementById('align-' + id).classList.toggle('active', id === a);
+  });
+  renderCurrent();
+}
+
+function updatePosFromInput() {
+  if (selectedTextIdx === null || !slides.length) return;
+  const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
+  tb.x     = parseInt(document.getElementById('pos-x').value) || 0;
+  tb.y     = parseInt(document.getElementById('pos-y').value) || 0;
+  tb.width = parseInt(document.getElementById('pos-w').value) || 500;
+  renderCurrent();
+}
+
+function snapPos(dir) {
+  if (selectedTextIdx === null || !slides.length) return;
+  const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
+  const pad = 80;
+  if (dir === 'left')     tb.x = pad;
+  if (dir === 'right')    tb.x = CANVAS_SIZE - tb.width - pad;
+  if (dir === 'center-h') tb.x = (CANVAS_SIZE - tb.width) / 2;
+  if (dir === 'top')      tb.y = pad;
+  if (dir === 'bottom') {
+    const lines = wrapTextSimple(tb).length;
+    tb.y = CANVAS_SIZE - lines * tb.fontSize * tb.lineHeight - pad;
+  }
+  if (dir === 'center-v') {
+    const lines = wrapTextSimple(tb).length;
+    tb.y = (CANVAS_SIZE - lines * tb.fontSize * tb.lineHeight) / 2;
+  }
+  document.getElementById('pos-x').value = Math.round(tb.x);
+  document.getElementById('pos-y').value = Math.round(tb.y);
+  renderCurrent();
+}
+
+function applyFormatToAll() {
+  if (selectedTextIdx === null || !slides.length) return;
+  const src = slides[currentSlideIdx].textBlocks[selectedTextIdx];
+  slides.forEach((slide, si) => {
+    if (si === currentSlideIdx) return;
+    slide.textBlocks.forEach(tb => {
+      tb.fontFamily    = src.fontFamily;
+      tb.fontSize      = src.fontSize;
+      tb.fontWeight    = src.fontWeight;
+      tb.fontStyle     = src.fontStyle;
+      tb.color         = src.color;
+      tb.opacity       = src.opacity;
+      tb.lineHeight    = src.lineHeight;
+      tb.letterSpacing = src.letterSpacing;
+      tb.align         = src.align;
+      tb.x             = src.x;
+      tb.y             = src.y;
+      tb.width         = src.width;
+    });
+  });
+  updateThumbs();
+}
+
+// ─── BACKGROUND ───────────────────────────────────────────────────────────────
+
+function setBgType(type) {
+  bgType = type;
+  if (!slides.length) return;
+  slides[currentSlideIdx].bgType = type;
+  document.getElementById('bg-solid-tab').classList.toggle('active', type === 'solid');
+  document.getElementById('bg-grad-tab').classList.toggle('active', type === 'gradient');
+  document.getElementById('bg-solid-ctrl').style.display = type === 'solid' ? '' : 'none';
+  document.getElementById('bg-grad-ctrl').style.display  = type === 'gradient' ? '' : 'none';
+  renderCurrent();
+}
+
+function updateBg() {
+  if (!slides.length) return;
+  const s = slides[currentSlideIdx];
+  s.bgColor   = document.getElementById('bg-color').value;
+  s.gradC1    = document.getElementById('grad-c1').value;
+  s.gradC2    = document.getElementById('grad-c2').value;
+  s.gradAngle = parseInt(document.getElementById('grad-angle').value);
+  renderCurrent();
+}
+
+function applyBgToAll() {
+  if (!slides.length) return;
+  const s = slides[currentSlideIdx];
+  slides.forEach((slide, i) => {
+    if (i === currentSlideIdx) return;
+    slide.bgType   = s.bgType;
+    slide.bgColor  = s.bgColor;
+    slide.gradC1   = s.gradC1;
+    slide.gradC2   = s.gradC2;
+    slide.gradAngle = s.gradAngle;
+  });
+  updateThumbs();
+}
+
+// ─── COLOR PRESETS ────────────────────────────────────────────────────────────
+
+const BG_COLORS = [
+  '#000000','#111111','#1a1a1a','#2d2d2d',
+  '#ffffff','#f5f5f0','#e8e8e8','#d0d0d0',
+  '#1a1a2e','#0f3460','#1b1b2f','#0d1b2a',
+  '#3a1c1c','#1c3a1c','#2a1a3e','#1a2e1a',
+];
+
+const GRAD_PRESETS = [
+  { c1:'#1a1a2e', c2:'#e94560', a:135, label:'Night Rose' },
+  { c1:'#0f3460', c2:'#533483', a:135, label:'Deep Blue' },
+  { c1:'#2d2d2d', c2:'#c8a96e', a:145, label:'Gold Dust' },
+  { c1:'#000000', c2:'#434343', a:180, label:'Obsidian' },
+  { c1:'#134e5e', c2:'#71b280', a:135, label:'Ocean' },
+  { c1:'#1a0533', c2:'#a066ff', a:135, label:'Violet' },
+  { c1:'#f7971e', c2:'#ffd200', a:135, label:'Sunrise' },
+  { c1:'#ee0979', c2:'#ff6a00', a:135, label:'Sunset' },
+];
+
+const TEXT_COLORS = [
+  '#ffffff','#f5f5f0','#e8e8e8','#cccccc',
+  '#000000','#111111','#333333','#555555',
+  '#c8ff00','#ffd700','#ff6b6b','#4ecdc4',
+  '#a8e6cf','#ffb6c1','#b39ddb','#80cbc4',
+];
+
+function initPresets() {
+  // BG solid presets
+  const bgPre = document.getElementById('bg-presets');
+  BG_COLORS.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'color-preset';
+    d.style.background = c;
+    if (c === '#ffffff' || c === '#f5f5f0' || c === '#e8e8e8' || c === '#d0d0d0') {
+      d.style.border = '2px solid rgba(255,255,255,0.2)';
+    }
+    d.title = c;
+    d.onclick = () => {
+      document.getElementById('bg-color').value = c;
+      if (slides.length) { slides[currentSlideIdx].bgColor = c; renderCurrent(); }
+    };
+    bgPre.appendChild(d);
+  });
+
+  // Gradient presets
+  const gradPre = document.getElementById('grad-presets');
+  GRAD_PRESETS.forEach(gp => {
+    const d = document.createElement('div');
+    d.className = 'grad-preset';
+    d.style.background = `linear-gradient(${gp.a}deg, ${gp.c1}, ${gp.c2})`;
+    d.title = gp.label;
+    d.onclick = () => {
+      document.getElementById('grad-c1').value = gp.c1;
+      document.getElementById('grad-c2').value = gp.c2;
+      document.getElementById('grad-angle').value = gp.a;
+      document.getElementById('grad-angle-val').textContent = gp.a + '°';
+      if (slides.length) {
+        const s = slides[currentSlideIdx];
+        s.gradC1 = gp.c1; s.gradC2 = gp.c2; s.gradAngle = gp.a;
+        renderCurrent();
+      }
+    };
+    gradPre.appendChild(d);
+  });
+
+  // Text color presets
+  const txtPre = document.getElementById('text-color-presets');
+  TEXT_COLORS.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'color-preset';
+    d.style.background = c;
+    if (c === '#ffffff' || c === '#f5f5f0' || c === '#e8e8e8' || c === '#cccccc') {
+      d.style.border = '2px solid rgba(255,255,255,0.2)';
+    }
+    d.title = c;
+    d.onclick = () => {
+      document.getElementById('text-color').value = c;
+      updateTextBlock();
+    };
+    txtPre.appendChild(d);
+  });
+}
+
+// ─── ANIMATION PREVIEW ────────────────────────────────────────────────────────
+
+function showAnimPreview() {
+  if (!slides.length) return;
+  animIdx = currentSlideIdx;
+  document.getElementById('anim-overlay').classList.add('show');
+  drawAnimFrame();
+}
+
+function closeAnim() {
+  document.getElementById('anim-overlay').classList.remove('show');
+  stopAnim();
+}
+
+function drawAnimFrame() {
+  const ac = document.getElementById('anim-canvas');
+  const fmt = EXPORT_FORMATS[previewSize];
+  const maxW = Math.min(540, window.innerWidth - 80);
+  const ratio = fmt.h / fmt.w;
+  ac.width  = maxW;
+  ac.height = Math.round(maxW * ratio);
+  ac.style.width  = maxW + 'px';
+  ac.style.height = Math.round(maxW * ratio) + 'px';
+  const off = renderSlideToSize(slides[animIdx], fmt.w, fmt.h);
+  ac.getContext('2d').drawImage(off, 0, 0, ac.width, ac.height);
+  document.getElementById('anim-info').textContent =
+    `Slide ${animIdx + 1} / ${slides.length} · ${fmt.label}`;
+  document.getElementById('play-btn').textContent = animPlaying ? '⏸ Pause' : '▶ Play';
+}
+
+function animPrev() { animIdx = (animIdx - 1 + slides.length) % slides.length; drawAnimFrame(); }
+function animNext() { animIdx = (animIdx + 1) % slides.length; drawAnimFrame(); }
+
+function toggleAnimPlay() {
+  animPlaying = !animPlaying;
+  if (animPlaying) {
+    animTimer = setInterval(animNext, 2000);
+  } else {
+    stopAnim();
+  }
+  document.getElementById('play-btn').textContent = animPlaying ? '⏸ Pause' : '▶ Play';
+}
+
+function stopAnim() {
+  animPlaying = false;
+  clearInterval(animTimer);
+}
+
+// ─── EXPORT ───────────────────────────────────────────────────────────────────
+
+function selectFmt(key) {
+  selectedFmt = key;
+  Object.keys(EXPORT_FORMATS).forEach(k => {
+    document.getElementById('fmt-' + k).classList.toggle('active', k === key);
+  });
+  setPreviewSize(key);
+}
+
+function showExport() {
+  selectedFmt = previewSize;
+  Object.keys(EXPORT_FORMATS).forEach(k => {
+    const el = document.getElementById('fmt-' + k);
+    if (el) el.classList.toggle('active', k === selectedFmt);
+  });
+  document.getElementById('export-modal').classList.add('show');
+}
+
+function closeExport() {
+  document.getElementById('export-modal').classList.remove('show');
+  document.getElementById('export-progress').style.display = 'none';
+  document.getElementById('pb').style.width = '0%';
+}
+
+async function doExport() {
+  if (!slides.length) return;
+  const prefix = document.getElementById('export-prefix').value || 'slide';
+  const fmt = EXPORT_FORMATS[selectedFmt];
+  const prog = document.getElementById('export-progress');
+  const pb   = document.getElementById('pb');
+  const status = document.getElementById('export-status');
+  prog.style.display = 'flex';
+
+  for (let i = 0; i < slides.length; i++) {
+    const off = renderSlideToSize(slides[i], fmt.w, fmt.h);
+    await new Promise(r => setTimeout(r, 30));
+    pb.style.width = ((i + 1) / slides.length * 100) + '%';
+    status.textContent = `Exporting slide ${i + 1} of ${slides.length} at ${fmt.label}…`;
+    const link = document.createElement('a');
+    link.download = `${prefix}-${String(i + 1).padStart(2, '0')}-${selectedFmt}.png`;
+    link.href = off.toDataURL('image/png');
+    link.click();
+    await new Promise(r => setTimeout(r, 120));
+  }
+
+  status.textContent = `Done! ${slides.length} slides exported at ${fmt.label}.`;
+  setTimeout(closeExport, 2000);
+}
+
+// ─── BULK IMPORT ──────────────────────────────────────────────────────────────
+
+function showBulkImport() {
+  document.getElementById('bulk-modal').classList.add('show');
+  document.getElementById('bulk-input').focus();
+  updateBulkPreview();
+}
+
+function closeBulkImport() {
+  document.getElementById('bulk-modal').classList.remove('show');
+}
+
+function parseBulkText(raw) {
+  return raw.split(/^---+$/m).map(s => s.trim()).filter(s => s.length > 0);
+}
+
+function updateBulkPreview() {
+  const raw = document.getElementById('bulk-input').value;
+  const parts = parseBulkText(raw);
+  document.getElementById('bulk-slide-count').textContent =
+    parts.length + (parts.length === 1 ? ' slide' : ' slides');
+  const chips = document.getElementById('bulk-chips');
+  chips.innerHTML = '';
+  parts.forEach((p, i) => {
+    const preview = p.replace(/\n/g, ' ').slice(0, 34) + (p.length > 34 ? '…' : '');
+    const chip = document.createElement('div');
+    chip.className = 'bulk-chip';
+    chip.innerHTML = `<span class="bulk-chip-num">${i + 1}</span>
+      <span class="bulk-chip-text">${preview || '(empty)'}</span>`;
+    chips.appendChild(chip);
+  });
+}
+
+function doBulkImport() {
+  const raw = document.getElementById('bulk-input').value.trim();
+  if (!raw) return;
+  const parts = parseBulkText(raw);
+  if (!parts.length) return;
+
+  const append  = document.getElementById('bulk-append').checked;
+  const inherit = document.getElementById('bulk-inherit').checked;
+
+  let styleTemplate = null;
+  let bgTemplate = null;
+
+  if (inherit && slides.length) {
+    const srcSlide = slides[currentSlideIdx];
+    const srcTb = srcSlide.textBlocks[0];
+    if (srcTb) styleTemplate = JSON.parse(JSON.stringify(srcTb));
+    bgTemplate = {
+      bgType: srcSlide.bgType, bgColor: srcSlide.bgColor,
+      gradC1: srcSlide.gradC1, gradC2: srcSlide.gradC2, gradAngle: srcSlide.gradAngle
+    };
+  }
+
+  if (!append) slides = [];
+
+  parts.forEach(text => {
+    const s = makeSlide();
+    if (bgTemplate) Object.assign(s, bgTemplate);
+    const tb = styleTemplate ? JSON.parse(JSON.stringify(styleTemplate)) : makeTextBlock();
+    tb.text = text;
+    s.textBlocks = [tb];
+    slides.push(s);
+  });
+
+  currentSlideIdx = append ? slides.length - parts.length : 0;
+  selectedTextIdx = null;
+  refreshSlidePicker();
+  loadSlideToUI();
+  renderCurrent();
+  closeBulkImport();
+  document.getElementById('bulk-input').value = '';
+}
+
+// ─── RESIZE ───────────────────────────────────────────────────────────────────
+
+window.addEventListener('resize', updateCanvasScale);
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+
+async function init() {
+  // Load fonts first
+  await loadFonts();
+
+  // Build font selectors
+  buildFontFamilySelect();
+  buildFontWeightSelect(FONT_REGISTRY[0]?.family || '');
+
+  // Init color presets
+  initPresets();
+
+  // Scale canvas
+  updateCanvasScale();
+
+  // Create 3 sample slides
+  const s1 = makeSlide();
+  s1.bgType = 'gradient';
+  s1.gradC1 = '#0f3460';
+  s1.gradC2 = '#533483';
+  s1.gradAngle = 135;
+  const tb1 = makeTextBlock();
+  tb1.text = 'Your Story\nStarts Here';
+  tb1.fontFamily = 'Neue Haas Display';
+  tb1.fontWeight = '300';
+  tb1.fontSize = 110;
+  tb1.align = 'center';
+  tb1.x = 80; tb1.y = 340; tb1.width = 920;
+  s1.textBlocks.push(tb1);
+  slides.push(s1);
+
+  const s2 = makeSlide();
+  s2.bgColor = '#0d0d0d';
+  s2.bgType = 'solid';
+  const tb2 = makeTextBlock();
+  tb2.text = 'Every\nmoment\nmatters';
+  tb2.fontFamily = 'Proxima Nova';
+  tb2.fontWeight = '700';
+  tb2.fontSize = 120;
+  tb2.align = 'left';
+  tb2.color = '#c8ff00';
+  tb2.x = 80; tb2.y = 200; tb2.width = 900;
+  s2.textBlocks.push(tb2);
+  slides.push(s2);
+
+  const s3 = makeSlide();
+  s3.bgType = 'gradient';
+  s3.gradC1 = '#3a1c1c';
+  s3.gradC2 = '#c8a96e';
+  s3.gradAngle = 145;
+  const tb3 = makeTextBlock();
+  tb3.text = '"The best time\nis always now."';
+  tb3.fontFamily = 'IBM Plex Sans';
+  tb3.fontWeight = '200';
+  tb3.fontSize = 72;
+  tb3.align = 'center';
+  tb3.x = 100; tb3.y = 380; tb3.width = 880;
+  s3.textBlocks.push(tb3);
+  slides.push(s3);
+
+  currentSlideIdx = 0;
+  refreshSlidePicker();
+  loadSlideToUI();
+  renderCurrent();
+
+  // Hide loading screen
+  document.getElementById('loading-screen').style.display = 'none';
+}
+
+init();
+</script>
+</body>
+</html>
