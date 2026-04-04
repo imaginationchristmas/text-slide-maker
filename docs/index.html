@@ -318,15 +318,40 @@ body {
   position: relative;
   box-shadow: 0 20px 70px rgba(0,0,0,0.65);
   border-radius: 3px;
-  overflow: hidden;
   outline: 1px solid var(--canvas-outline);
   flex-shrink: 0;
 }
-#main-canvas { display: block; }
+#main-canvas { display: block; overflow: hidden; border-radius: 3px; }
 #canvas-overlay {
   position: absolute; inset: 0;
   cursor: default;
+  border-radius: 3px;
+  overflow: hidden;
 }
+/* Background image selection box + corner handles */
+#bg-selection-box {
+  display: none;
+  position: absolute;
+  border: 1.5px solid var(--accent);
+  pointer-events: none;
+  z-index: 9;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.3);
+}
+.bg-corner-handle {
+  position: absolute;
+  width: 12px; height: 12px;
+  background: #fff;
+  border: 2px solid var(--accent);
+  border-radius: 2px;
+  z-index: 10;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  pointer-events: all;
+}
+.bg-corner-handle[data-corner="tl"] { cursor: nwse-resize; top: 0; left: 0; }
+.bg-corner-handle[data-corner="tr"] { cursor: nesw-resize; top: 0; left: 100%; }
+.bg-corner-handle[data-corner="bl"] { cursor: nesw-resize; top: 100%; left: 0; }
+.bg-corner-handle[data-corner="br"] { cursor: nwse-resize; top: 100%; left: 100%; }
 
 #canvas-size-label {
   margin-top: 8px;
@@ -805,6 +830,12 @@ input[type=color] {
     <div id="canvas-wrap">
       <canvas id="main-canvas" width="1080" height="1080"></canvas>
       <div id="canvas-overlay"></div>
+      <div id="bg-selection-box">
+        <div class="bg-corner-handle" data-corner="tl"></div>
+        <div class="bg-corner-handle" data-corner="tr"></div>
+        <div class="bg-corner-handle" data-corner="bl"></div>
+        <div class="bg-corner-handle" data-corner="br"></div>
+      </div>
     </div>
     <div id="canvas-size-label">1080 × 1080 · Square</div>
   </div>
@@ -1260,6 +1291,15 @@ let dragOffX = 0, dragOffY = 0;
 let draggingBg = false;
 let bgDragStartX = 0, bgDragStartY = 0;
 let bgDragOriginX = 0, bgDragOriginY = 0;
+// Background image selection + resize state
+let bgSelected = false;
+let draggingBgResize = null; // 'tl'|'tr'|'bl'|'br' or null
+// Anchor corner position in canvas-pixel space (opposite corner, stays fixed)
+let bgResizeAnchorX = 0, bgResizeAnchorY = 0;
+// Original image rect at drag start (canvas-pixel space)
+let bgResizeStartRect = null; // {dx,dy,dw,dh}
+// Base image dimensions at scale=100 for the current fit mode
+let bgResizeBaseW = 0, bgResizeBaseH = 0;
 
 // Animation state
 let animIdx = 0;
@@ -1613,6 +1653,7 @@ function wrapTextSimple(tb) {
 function renderCurrent() {
   if (!slides.length) {
     ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+    updateBgSelectionBox();
     return;
   }
   const fmt = EXPORT_FORMATS[previewSize];
@@ -1620,6 +1661,49 @@ function renderCurrent() {
   ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
   ctx.drawImage(off, 0, 0);
   updateThumbs();
+  updateBgSelectionBox();
+}
+
+// Compute the rendered image rect in canvas-pixel space for the current slide.
+// Returns {dx, dy, dw, dh} or null if no bg image.
+function getBgImageRect(slide) {
+  if (!slide || slide.bgType !== 'image' || !slide.bgImage) return null;
+  const img = bgImageCache.get(slide.bgImage);
+  if (!img || !img.complete || !img.naturalWidth) return null;
+  const fmt = EXPORT_FORMATS[previewSize];
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  const fit = slide.bgImageFit || 'cover';
+  const userScale = (slide.bgImageScale != null ? slide.bgImageScale : 100) / 100;
+  const offX = (slide.bgImageX || 0) * (fmt.w / 1080);
+  const offY = (slide.bgImageY || 0) * (fmt.h / 1080);
+  let dw, dh;
+  if (fit === 'cover') {
+    const s = Math.max(fmt.w / iw, fmt.h / ih) * userScale;
+    dw = iw * s; dh = ih * s;
+  } else if (fit === 'contain') {
+    const s = Math.min(fmt.w / iw, fmt.h / ih) * userScale;
+    dw = iw * s; dh = ih * s;
+  } else {
+    dw = fmt.w * userScale; dh = fmt.h * userScale;
+  }
+  const dx = (fmt.w - dw) / 2 + offX;
+  const dy = (fmt.h - dh) / 2 + offY;
+  return { dx, dy, dw, dh };
+}
+
+// Position the selection box overlay to match the rendered bg image rect.
+function updateBgSelectionBox() {
+  const box = document.getElementById('bg-selection-box');
+  if (!slides.length || !bgSelected) { box.style.display = 'none'; return; }
+  const slide = slides[currentSlideIdx];
+  const rect = getBgImageRect(slide);
+  if (!rect) { box.style.display = 'none'; return; }
+  const { dx, dy, dw, dh } = rect;
+  box.style.display = 'block';
+  box.style.left   = (dx * scale) + 'px';
+  box.style.top    = (dy * scale) + 'px';
+  box.style.width  = (dw * scale) + 'px';
+  box.style.height = (dh * scale) + 'px';
 }
 
 // ─── PREVIEW SIZE ─────────────────────────────────────────────────────────────
@@ -1690,6 +1774,39 @@ function hitTestTextBlocks(slide, mx, my) {
   return -1;
 }
 
+// Corner handle mousedown — start resize drag
+document.querySelectorAll('.bg-corner-handle').forEach(handle => {
+  handle.addEventListener('mousedown', e => {
+    e.stopPropagation();
+    if (!slides.length) return;
+    const slide = slides[currentSlideIdx];
+    const rect = getBgImageRect(slide);
+    if (!rect) return;
+    const corner = handle.dataset.corner;
+    draggingBgResize = corner;
+    // Anchor = opposite corner in canvas-pixel space
+    const { dx, dy, dw, dh } = rect;
+    bgResizeAnchorX = corner === 'tl' || corner === 'bl' ? dx + dw : dx;
+    bgResizeAnchorY = corner === 'tl' || corner === 'tr' ? dy + dh : dy;
+    bgResizeStartRect = { dx, dy, dw, dh };
+    // Compute base dimensions (what scale=100 produces)
+    const img = bgImageCache.get(slide.bgImage);
+    const fmt = EXPORT_FORMATS[previewSize];
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    const fit = slide.bgImageFit || 'cover';
+    if (fit === 'cover') {
+      const s = Math.max(fmt.w / iw, fmt.h / ih);
+      bgResizeBaseW = iw * s; bgResizeBaseH = ih * s;
+    } else if (fit === 'contain') {
+      const s = Math.min(fmt.w / iw, fmt.h / ih);
+      bgResizeBaseW = iw * s; bgResizeBaseH = ih * s;
+    } else {
+      bgResizeBaseW = fmt.w; bgResizeBaseH = fmt.h;
+    }
+    e.preventDefault();
+  });
+});
+
 overlay.addEventListener('mousedown', e => {
   if (!slides.length) return;
   const slide = slides[currentSlideIdx];
@@ -1698,6 +1815,8 @@ overlay.addEventListener('mousedown', e => {
   const hit = hitTestTextBlocks(slide, mx, my);
 
   if (hit >= 0) {
+    // Clicking a text block deselects bg image
+    bgSelected = false;
     selectedTextIdx = hit;
     dragging = true;
     const tb = slide.textBlocks[hit];
@@ -1705,20 +1824,30 @@ overlay.addEventListener('mousedown', e => {
     dragOffY = my - tb.y;
     selectTextBlock(hit);
     overlay.style.cursor = 'grabbing';
+    updateBgSelectionBox();
   } else if (slide.bgType === 'image' && slide.bgImage) {
-    // Start background image pan
-    draggingBg = true;
-    bgDragStartX = e.clientX;
-    bgDragStartY = e.clientY;
-    bgDragOriginX = slide.bgImageX || 0;
-    bgDragOriginY = slide.bgImageY || 0;
-    overlay.style.cursor = 'grabbing';
-    selectedTextIdx = null;
-    refreshTextPanel();
+    // Click bg image: select it (first click) or start pan (already selected)
+    if (!bgSelected) {
+      bgSelected = true;
+      selectedTextIdx = null;
+      refreshTextPanel();
+      updateBgSelectionBox();
+    } else {
+      // Already selected — start pan
+      draggingBg = true;
+      bgDragStartX = e.clientX;
+      bgDragStartY = e.clientY;
+      bgDragOriginX = slide.bgImageX || 0;
+      bgDragOriginY = slide.bgImageY || 0;
+      overlay.style.cursor = 'grabbing';
+    }
   } else {
+    // Click empty area — deselect
+    bgSelected = false;
     selectedTextIdx = null;
     refreshTextPanel();
     overlay.style.cursor = 'default';
+    updateBgSelectionBox();
   }
 });
 
@@ -1758,19 +1887,76 @@ overlay.addEventListener('dblclick', e => {
 
 // Update cursor on hover
 overlay.addEventListener('mousemove', e => {
-  if (dragging || draggingBg) return;
+  if (dragging || draggingBg || draggingBgResize) return;
   if (!slides.length) return;
   const slide = slides[currentSlideIdx];
   const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
   const onText = hitTestTextBlocks(slide, mx, my) >= 0;
-  if (onText || (slide.bgType === 'image' && slide.bgImage)) {
+  if (onText) {
     overlay.style.cursor = 'grab';
+  } else if (slide.bgType === 'image' && slide.bgImage) {
+    overlay.style.cursor = bgSelected ? 'grab' : 'pointer';
   } else {
     overlay.style.cursor = 'default';
   }
 });
 
 window.addEventListener('mousemove', e => {
+  if (draggingBgResize) {
+    const slide = slides[currentSlideIdx];
+    const fmt = EXPORT_FORMATS[previewSize];
+    // Mouse position in canvas-pixel space
+    const canvasRect = mainCanvas.getBoundingClientRect();
+    const mouseCanvasX = (e.clientX - canvasRect.left) / scale;
+    const mouseCanvasY = (e.clientY - canvasRect.top)  / scale;
+
+    // Signed delta from anchor to mouse
+    let rawDw = mouseCanvasX - bgResizeAnchorX;
+    let rawDh = mouseCanvasY - bgResizeAnchorY;
+
+    // Shift = constrain to original aspect ratio (preserve sign)
+    if (e.shiftKey && bgResizeStartRect) {
+      const origAspect = bgResizeStartRect.dw / bgResizeStartRect.dh;
+      const absDw = Math.abs(rawDw), absDh = Math.abs(rawDh);
+      if (absDw / Math.max(absDh, 0.001) > origAspect) {
+        rawDw = Math.sign(rawDw || 1) * absDh * origAspect;
+      } else {
+        rawDh = Math.sign(rawDh || 1) * absDw / origAspect;
+      }
+    }
+
+    // Enforce minimum 50px, preserving sign so anchor stays fixed
+    rawDw = Math.sign(rawDw || 1) * Math.max(50, Math.abs(rawDw));
+    rawDh = Math.sign(rawDh || 1) * Math.max(50, Math.abs(rawDh));
+
+    // New rect: anchor corner is always at bgResizeAnchorX/Y
+    const newDx = bgResizeAnchorX + Math.min(0, rawDw);
+    const newDy = bgResizeAnchorY + Math.min(0, rawDh);
+    const newAbsDw = Math.abs(rawDw);
+    const newAbsDh = Math.abs(rawDh);
+
+    // New scale derived from new width vs base width at scale=100
+    const newScale = Math.round(Math.max(10, Math.min(300, (newAbsDw / bgResizeBaseW) * 100)));
+
+    // New center → new bgImageX/Y offset in 1080-space
+    const newCenterX = newDx + newAbsDw / 2;
+    const newCenterY = newDy + newAbsDh / 2;
+    const newOffX = (newCenterX - fmt.w / 2) * (1080 / fmt.w);
+    const newOffY = (newCenterY - fmt.h / 2) * (1080 / fmt.h);
+
+    slide.bgImageScale = newScale;
+    slide.bgImageX = Math.round(Math.max(-540, Math.min(540, newOffX)));
+    slide.bgImageY = Math.round(Math.max(-540, Math.min(540, newOffY)));
+
+    document.getElementById('bg-img-scale').value = newScale;
+    document.getElementById('bg-img-scale-val').textContent = newScale + '%';
+    document.getElementById('bg-img-x').value = slide.bgImageX;
+    document.getElementById('bg-img-y').value = slide.bgImageY;
+    document.getElementById('bg-img-x-val').textContent = slide.bgImageX;
+    document.getElementById('bg-img-y-val').textContent = slide.bgImageY;
+    renderCurrent();
+    return;
+  }
   if (draggingBg) {
     const slide = slides[currentSlideIdx];
     const dx = (e.clientX - bgDragStartX) / scale;
@@ -1799,14 +1985,19 @@ window.addEventListener('mousemove', e => {
 });
 
 window.addEventListener('mouseup', () => {
+  if (draggingBgResize) {
+    draggingBgResize = null;
+    pushUndoDebounced();
+    scheduleSave();
+  }
   if (draggingBg) {
     draggingBg = false;
-    overlay.style.cursor = 'grab';
+    overlay.style.cursor = bgSelected ? 'grab' : 'default';
     pushUndoDebounced();
     scheduleSave();
   }
   dragging = false;
-  if (!draggingBg) overlay.style.cursor = 'default';
+  if (!draggingBg && !draggingBgResize) overlay.style.cursor = 'default';
 });
 
 // ─── SLIDES MANAGEMENT ────────────────────────────────────────────────────────
@@ -1840,6 +2031,7 @@ function deleteSlide(i) {
 
 function selectSlide(i) {
   currentSlideIdx = i;
+  bgSelected = false;
   // Auto-select first text block if the slide has any, so the right panel stays visible
   const blocks = slides[i] && slides[i].textBlocks;
   selectedTextIdx = (blocks && blocks.length > 0) ? 0 : null;
@@ -2312,6 +2504,7 @@ function setBgImage(event) {
 function clearBgImage() {
   if (!slides.length) return;
   pushUndo();
+  bgSelected = false;
   slides[currentSlideIdx].bgImage = null;
   slides[currentSlideIdx].bgType = 'solid';
   bgType = 'solid';
