@@ -1193,12 +1193,32 @@ And this becomes slide three</div>
       <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px;">Filename prefix</div>
       <input type="text" id="export-prefix" value="slide" placeholder="e.g. my-post">
     </div>
+    <!-- GIF / Video options -->
+    <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;">GIF / Video Options</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:11px;color:var(--text2);width:90px;">Frame delay</span>
+        <input type="range" id="gif-delay" min="200" max="5000" step="100" value="1500" style="flex:1;"
+          oninput="document.getElementById('gif-delay-val').textContent=(this.value/1000).toFixed(1)+'s'">
+        <span id="gif-delay-val" style="font-size:11px;color:var(--text2);width:32px;text-align:right;">1.5s</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:11px;color:var(--text2);width:90px;">Export size</span>
+        <select id="gif-size" style="flex:1;background:var(--panel2);border:1px solid var(--border2);color:var(--text);border-radius:4px;padding:3px 6px;font-size:11px;">
+          <option value="1080" selected>Full — 1080px wide</option>
+          <option value="720">Medium — 720px wide</option>
+          <option value="540">Small — 540px wide</option>
+        </select>
+      </div>
+    </div>
     <div id="export-progress" style="display:none;flex-direction:column;gap:7px;">
       <div class="progress-bar-wrap"><div class="progress-bar" id="pb"></div></div>
       <span id="export-status" style="font-size:11px;color:var(--text2);">Exporting…</span>
     </div>
-    <div style="display:flex;gap:7px;">
-      <button class="tb-btn primary" onclick="doExport()" title="Download all slides as PNG images in a ZIP file" style="flex:1;justify-content:center;">↓ Export as ZIP</button>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;">
+      <button class="tb-btn primary" onclick="doExport()" title="Download all slides as PNG images in a ZIP file" style="flex:1;justify-content:center;min-width:120px;">↓ ZIP (PNG)</button>
+      <button class="tb-btn" onclick="doExportGif()" title="Download all slides as an animated GIF" style="flex:1;justify-content:center;min-width:100px;">↓ GIF</button>
+      <button class="tb-btn" id="btn-export-mp4" onclick="doExportMp4()" title="Download all slides as an MP4 video (Instagram-compatible)" style="flex:1;justify-content:center;min-width:100px;">↓ MP4 (Video)</button>
       <button class="tb-btn" onclick="closeExport()" title="Discard and close">Cancel</button>
     </div>
   </div>
@@ -2563,11 +2583,15 @@ function applyBgToAll() {
     slide.gradC1    = s.gradC1;
     slide.gradC2    = s.gradC2;
     slide.gradAngle = s.gradAngle;
-    slide.bgImage          = s.bgImage;
-    slide.bgImageFit       = s.bgImageFit;
-    slide.bgImageX         = s.bgImageX;
-    slide.bgImageY         = s.bgImageY;
-    slide.bgImageScale     = s.bgImageScale;
+    // Only copy image properties when the source slide actually uses an image.
+    // If the source is solid/gradient, leave each slide's own image intact.
+    if (s.bgType === 'image') {
+      slide.bgImage      = s.bgImage;
+      slide.bgImageFit   = s.bgImageFit;
+      slide.bgImageX     = s.bgImageX;
+      slide.bgImageY     = s.bgImageY;
+      slide.bgImageScale = s.bgImageScale;
+    }
   });
   updateThumbs();
 }
@@ -2902,6 +2926,722 @@ async function doExport() {
   setTimeout(closeExport, 2000);
 }
 
+// ─── GIF EXPORT ───────────────────────────────────────────────────────────────
+// Self-contained animated GIF encoder (no external deps, no workers).
+// Uses median-cut palette quantization + LZW compression.
+
+// --- Minimal GIF encoder ---
+function encodeGif(frames, w, h, delayCs) {
+  // frames: array of ImageData (or {data,width,height})
+  // delayCs: frame delay in centiseconds (100ths of a second)
+  const out = [];
+  const push = (b) => out.push(b);
+  const pushArr = (a) => { for (let i = 0; i < a.length; i++) out.push(a[i]); };
+  const pushStr = (s) => { for (let i = 0; i < s.length; i++) out.push(s.charCodeAt(i)); };
+  const pushU16 = (n) => { out.push(n & 0xff); out.push((n >> 8) & 0xff); };
+
+  // GIF Header
+  pushStr('GIF89a');
+  pushU16(w); pushU16(h);
+  push(0x70); // global color table flag=0 (we use local per frame), color res=1, sort=0, size=0
+  push(0);    // background color index
+  push(0);    // pixel aspect ratio
+
+  // Netscape loop extension (loop forever)
+  pushStr('\x21\xff\x0bNETSCAPE2.0\x03\x01\x00\x00\x00');
+
+  for (let fi = 0; fi < frames.length; fi++) {
+    const imgData = frames[fi];
+    const pixels = imgData.data; // Uint8ClampedArray RGBA
+
+    // Build 256-color palette via median cut
+    const palette = buildPalette(pixels, w, h);
+    const palSize = palette.length; // always 256
+
+    // Floyd-Steinberg dithering — eliminates banding on gradients/solid colors
+    // Work on a mutable float copy of the pixel data
+    const buf = new Float32Array(w * h * 3);
+    for (let i = 0; i < w * h; i++) {
+      buf[i*3]   = pixels[i*4];
+      buf[i*3+1] = pixels[i*4+1];
+      buf[i*3+2] = pixels[i*4+2];
+    }
+    const indices = new Uint8Array(w * h);
+    const cache = new Map();
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        const r = Math.max(0, Math.min(255, Math.round(buf[i*3])));
+        const g = Math.max(0, Math.min(255, Math.round(buf[i*3+1])));
+        const b = Math.max(0, Math.min(255, Math.round(buf[i*3+2])));
+        const key = (r << 16) | (g << 8) | b;
+        let idx = cache.get(key);
+        if (idx === undefined) {
+          idx = nearestColor(palette, r, g, b);
+          cache.set(key, idx);
+        }
+        indices[i] = idx;
+        // Quantization error
+        const pc = palette[idx];
+        const er = r - pc[0], eg = g - pc[1], eb = b - pc[2];
+        // Distribute error to right, bottom-left, bottom, bottom-right (7/16, 3/16, 5/16, 1/16)
+        if (x + 1 < w) {
+          buf[(i+1)*3]   += er * 7/16;
+          buf[(i+1)*3+1] += eg * 7/16;
+          buf[(i+1)*3+2] += eb * 7/16;
+        }
+        if (y + 1 < h) {
+          if (x > 0) {
+            buf[(i+w-1)*3]   += er * 3/16;
+            buf[(i+w-1)*3+1] += eg * 3/16;
+            buf[(i+w-1)*3+2] += eb * 3/16;
+          }
+          buf[(i+w)*3]   += er * 5/16;
+          buf[(i+w)*3+1] += eg * 5/16;
+          buf[(i+w)*3+2] += eb * 5/16;
+          if (x + 1 < w) {
+            buf[(i+w+1)*3]   += er * 1/16;
+            buf[(i+w+1)*3+1] += eg * 1/16;
+            buf[(i+w+1)*3+2] += eb * 1/16;
+          }
+        }
+      }
+    }
+
+    // Graphic Control Extension (delay)
+    push(0x21); push(0xf9); push(0x04);
+    push(0x00); // disposal: do not dispose
+    pushU16(delayCs);
+    push(0x00); // transparent color index (none)
+    push(0x00); // block terminator
+
+    // Image Descriptor
+    push(0x2c);
+    pushU16(0); pushU16(0); // left, top
+    pushU16(w); pushU16(h);
+    push(0x80 | 0x07); // local color table flag=1, interlace=0, size=7 (256 colors)
+
+    // Local Color Table (256 × 3 bytes)
+    for (let i = 0; i < 256; i++) {
+      const c = palette[i] || [0,0,0];
+      push(c[0]); push(c[1]); push(c[2]);
+    }
+
+    // Image Data — LZW compressed
+    const lzw = lzwEncode(indices, 8);
+    push(8); // LZW minimum code size
+    // Write in sub-blocks of max 255 bytes
+    let pos = 0;
+    while (pos < lzw.length) {
+      const blockLen = Math.min(255, lzw.length - pos);
+      push(blockLen);
+      for (let i = 0; i < blockLen; i++) push(lzw[pos++]);
+    }
+    push(0x00); // block terminator
+  }
+
+  push(0x3b); // GIF trailer
+
+  return new Uint8Array(out);
+}
+
+function buildPalette(pixels, w, h) {
+  // Simple median-cut: collect all unique colors, then reduce to 256
+  // For speed, sample every pixel and use a fast quantizer
+  const total = w * h;
+  // Collect colors into buckets by 4-bit quantization first
+  const buckets = new Map();
+  for (let i = 0; i < total; i++) {
+    const r = pixels[i*4], g = pixels[i*4+1], b = pixels[i*4+2];
+    const key = ((r >> 2) << 12) | ((g >> 2) << 6) | (b >> 2);
+    if (!buckets.has(key)) buckets.set(key, [r, g, b]);
+  }
+  let colors = Array.from(buckets.values());
+  // If ≤256 unique colors, use them directly (pad to 256)
+  if (colors.length <= 256) {
+    while (colors.length < 256) colors.push([0, 0, 0]);
+    return colors;
+  }
+  // Median cut to 256
+  return medianCut(colors, 256);
+}
+
+function medianCut(colors, maxColors) {
+  let buckets = [colors];
+  while (buckets.length < maxColors) {
+    // Find bucket with largest range
+    let maxRange = -1, splitIdx = 0;
+    for (let i = 0; i < buckets.length; i++) {
+      const b = buckets[i];
+      if (b.length < 2) continue;
+      let rMin=255,rMax=0,gMin=255,gMax=0,bMin=255,bMax=0;
+      for (const c of b) {
+        if(c[0]<rMin)rMin=c[0]; if(c[0]>rMax)rMax=c[0];
+        if(c[1]<gMin)gMin=c[1]; if(c[1]>gMax)gMax=c[1];
+        if(c[2]<bMin)bMin=c[2]; if(c[2]>bMax)bMax=c[2];
+      }
+      const range = Math.max(rMax-rMin, gMax-gMin, bMax-bMin);
+      if (range > maxRange) { maxRange = range; splitIdx = i; }
+    }
+    const bucket = buckets[splitIdx];
+    if (bucket.length < 2) break;
+    // Find channel with max range
+    let rMin=255,rMax=0,gMin=255,gMax=0,bMin=255,bMax=0;
+    for (const c of bucket) {
+      if(c[0]<rMin)rMin=c[0]; if(c[0]>rMax)rMax=c[0];
+      if(c[1]<gMin)gMin=c[1]; if(c[1]>gMax)gMax=c[1];
+      if(c[2]<bMin)bMin=c[2]; if(c[2]>bMax)bMax=c[2];
+    }
+    const rRange=rMax-rMin, gRange=gMax-gMin, bRange=bMax-bMin;
+    const ch = rRange>=gRange && rRange>=bRange ? 0 : gRange>=bRange ? 1 : 2;
+    bucket.sort((a,b) => a[ch]-b[ch]);
+    const mid = Math.floor(bucket.length / 2);
+    buckets.splice(splitIdx, 1, bucket.slice(0, mid), bucket.slice(mid));
+  }
+  // Average each bucket to get palette color
+  const palette = buckets.map(b => {
+    let r=0,g=0,bl=0;
+    for(const c of b){r+=c[0];g+=c[1];bl+=c[2];}
+    return [Math.round(r/b.length), Math.round(g/b.length), Math.round(bl/b.length)];
+  });
+  while (palette.length < 256) palette.push([0,0,0]);
+  return palette;
+}
+
+function nearestColor(palette, r, g, b) {
+  let best = 0, bestDist = Infinity;
+  for (let i = 0; i < palette.length; i++) {
+    const c = palette[i];
+    const dr=c[0]-r, dg=c[1]-g, db=c[2]-b;
+    const d = dr*dr + dg*dg + db*db;
+    if (d < bestDist) { bestDist = d; best = i; if (d === 0) break; }
+  }
+  return best;
+}
+
+function lzwEncode(indices, minCodeSize) {
+  const clearCode = 1 << minCodeSize;
+  const eofCode = clearCode + 1;
+  let codeSize = minCodeSize + 1;
+  let nextCode = eofCode + 1;
+  const maxCode = () => 1 << codeSize;
+
+  // Output bit stream
+  const output = [];
+  let curByte = 0, curBits = 0;
+  const writeBits = (code) => {
+    curByte |= code << curBits;
+    curBits += codeSize;
+    while (curBits >= 8) {
+      output.push(curByte & 0xff);
+      curByte >>= 8;
+      curBits -= 8;
+    }
+  };
+  const flush = () => { if (curBits > 0) { output.push(curByte & 0xff); curByte = 0; curBits = 0; } };
+
+  // LZW compression
+  const table = new Map();
+  const resetTable = () => {
+    table.clear();
+    for (let i = 0; i < clearCode; i++) table.set(String(i), i);
+    codeSize = minCodeSize + 1;
+    nextCode = eofCode + 1;
+  };
+
+  resetTable();
+  writeBits(clearCode);
+
+  let prefix = String(indices[0]);
+  for (let i = 1; i < indices.length; i++) {
+    const suffix = String(indices[i]);
+    const combined = prefix + ',' + suffix;
+    if (table.has(combined)) {
+      prefix = combined;
+    } else {
+      writeBits(table.get(prefix));
+      if (nextCode < 4096) {
+        table.set(combined, nextCode++);
+        if (nextCode > maxCode() && codeSize < 12) codeSize++;
+      } else {
+        writeBits(clearCode);
+        resetTable();
+      }
+      prefix = suffix;
+    }
+  }
+  writeBits(table.get(prefix));
+  writeBits(eofCode);
+  flush();
+  return output;
+}
+
+async function doExportGif() {
+  if (!slides.length) return;
+  const prefix = document.getElementById('export-prefix').value || 'slide';
+  const fmt = EXPORT_FORMATS[selectedFmt];
+  const gifW = parseInt(document.getElementById('gif-size').value);
+  const gifH = Math.round(gifW * (fmt.h / fmt.w));
+  const delayMs = parseInt(document.getElementById('gif-delay').value);
+  const delayCs = Math.round(delayMs / 10); // centiseconds
+
+  const prog = document.getElementById('export-progress');
+  const pb   = document.getElementById('pb');
+  const status = document.getElementById('export-status');
+  prog.style.display = 'flex';
+
+  const frames = [];
+  const offCanvas = document.createElement('canvas');
+  offCanvas.width = gifW; offCanvas.height = gifH;
+  const offCtx = offCanvas.getContext('2d');
+
+  for (let i = 0; i < slides.length; i++) {
+    status.textContent = `Rendering slide ${i + 1} of ${slides.length}…`;
+    pb.style.width = ((i + 0.5) / slides.length * 80) + '%';
+    await new Promise(r => setTimeout(r, 20));
+    const off = renderSlideToSize(slides[i], fmt.w, fmt.h);
+    offCtx.clearRect(0, 0, gifW, gifH);
+    offCtx.drawImage(off, 0, 0, gifW, gifH);
+    frames.push(offCtx.getImageData(0, 0, gifW, gifH));
+  }
+
+  status.textContent = 'Encoding GIF…';
+  pb.style.width = '85%';
+  await new Promise(r => setTimeout(r, 30));
+
+  const gifBytes = encodeGif(frames, gifW, gifH, delayCs);
+  pb.style.width = '100%';
+
+  const blob = new Blob([gifBytes], { type: 'image/gif' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${prefix}-${selectedFmt}.gif`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  status.textContent = `Done! Animated GIF exported (${slides.length} frames, ${gifW}×${gifH}).`;
+  setTimeout(closeExport, 2500);
+}
+
+// ─── MP4 EXPORT (WebCodecs + inline MP4 muxer) ────────────────────────────────
+// Minimal ISO 14496-12 MP4 muxer. Uses a ByteWriter that accumulates bytes in
+// a plain number array (avoids Uint8Array constructor-from-array pitfalls), then
+// converts to Uint8Array at the end. Produces a valid single-track H.264 MP4.
+
+const Mp4Muxer = (() => {
+  // ── ByteWriter ──────────────────────────────────────────────────────────────
+  function ByteWriter() {
+    this.buf = [];
+  }
+  ByteWriter.prototype.u8  = function(n) { this.buf.push(n & 0xff); };
+  ByteWriter.prototype.u16 = function(n) { this.buf.push((n >>> 8) & 0xff, n & 0xff); };
+  ByteWriter.prototype.u32 = function(n) { this.buf.push((n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff); };
+  ByteWriter.prototype.str = function(s) { for (let i = 0; i < s.length; i++) this.buf.push(s.charCodeAt(i)); };
+  ByteWriter.prototype.bytes = function(arr) { for (let i = 0; i < arr.length; i++) this.buf.push(arr[i]); };
+  ByteWriter.prototype.zeros = function(n) { for (let i = 0; i < n; i++) this.buf.push(0); };
+  ByteWriter.prototype.length = function() { return this.buf.length; };
+  ByteWriter.prototype.toUint8Array = function() { return new Uint8Array(this.buf); };
+  // Write a sub-writer's content as a box: [size(4)][type(4)][payload]
+  ByteWriter.prototype.box = function(type, payloadWriter) {
+    const payload = payloadWriter.buf;
+    this.u32(8 + payload.length);
+    this.str(type);
+    this.bytes(payload);
+  };
+  // Full box: box with version(1) + flags(3) prepended to payload
+  ByteWriter.prototype.fullBox = function(type, version, flags, payloadWriter) {
+    const inner = new ByteWriter();
+    inner.u8(version);
+    inner.u8((flags >>> 16) & 0xff);
+    inner.u8((flags >>> 8) & 0xff);
+    inner.u8(flags & 0xff);
+    inner.bytes(payloadWriter.buf);
+    this.box(type, inner);
+  };
+
+  // ── build(chunks, width, height, timescale, totalDuration) ──────────────────
+  // chunks: [{data: Uint8Array, duration: number, config?: Uint8Array}]
+  // Returns Uint8Array of the complete MP4 file.
+  function build(chunks, width, height, timescale, totalDuration) {
+    const n = chunks.length;
+    const sampleSizes = chunks.map(c => c.data.length);
+    const sampleDurations = chunks.map(c => c.duration);
+
+    // ── ftyp ──
+    const ftypW = new ByteWriter();
+    ftypW.str('isom'); ftypW.u32(0x200);
+    ftypW.str('isom'); ftypW.str('iso2'); ftypW.str('avc1'); ftypW.str('mp41');
+    const ftypBox = new ByteWriter();
+    ftypBox.box('ftyp', ftypW);
+
+    // ── avcC (decoder config) ──
+    const avcCdata = chunks[0] && chunks[0].config
+      ? chunks[0].config
+      : new Uint8Array([
+          0x01, 0x42, 0x00, 0x1f, 0xff, 0xe1, 0x00, 0x0f,
+          0x67, 0x42, 0x00, 0x1f, 0xda, 0x01, 0x40, 0x16,
+          0xec, 0x04, 0x40, 0x00, 0x00, 0x03, 0x00, 0x40,
+          0x01, 0x00, 0x04, 0x68, 0xce, 0x38, 0x80
+        ]);
+    const avcCpayload = new ByteWriter();
+    avcCpayload.bytes(avcCdata);
+    const avcCbox = new ByteWriter();
+    avcCbox.box('avcC', avcCpayload);
+
+    // ── avc1 (visual sample entry) ──
+    const avc1payload = new ByteWriter();
+    avc1payload.zeros(6);          // reserved
+    avc1payload.u16(1);            // data-reference-index
+    avc1payload.zeros(16);         // pre_defined + reserved
+    avc1payload.u16(width);
+    avc1payload.u16(height);
+    avc1payload.u32(0x00480000);   // horizResolution 72dpi
+    avc1payload.u32(0x00480000);   // vertResolution 72dpi
+    avc1payload.u32(0);            // reserved
+    avc1payload.u16(1);            // frame_count
+    avc1payload.zeros(32);         // compressorname
+    avc1payload.u16(0x0018);       // depth
+    avc1payload.u16(0xffff);       // pre_defined
+    avc1payload.bytes(avcCbox.buf);
+    const avc1box = new ByteWriter();
+    avc1box.box('avc1', avc1payload);
+
+    // ── stsd ──
+    const stsdPayload = new ByteWriter();
+    stsdPayload.u32(1); // entry count
+    stsdPayload.bytes(avc1box.buf);
+    const stsdBox = new ByteWriter();
+    stsdBox.fullBox('stsd', 0, 0, stsdPayload);
+
+    // ── stts (time-to-sample) ──
+    const sttsEntries = [];
+    let runLen = 1, runDur = sampleDurations[0];
+    for (let i = 1; i < n; i++) {
+      if (sampleDurations[i] === runDur) runLen++;
+      else { sttsEntries.push([runLen, runDur]); runLen = 1; runDur = sampleDurations[i]; }
+    }
+    sttsEntries.push([runLen, runDur]);
+    const sttsPayload = new ByteWriter();
+    sttsPayload.u32(sttsEntries.length);
+    for (const [cnt, dur] of sttsEntries) { sttsPayload.u32(cnt); sttsPayload.u32(dur); }
+    const sttsBox = new ByteWriter();
+    sttsBox.fullBox('stts', 0, 0, sttsPayload);
+
+    // ── stss (sync samples — all keyframes) ──
+    const stssPayload = new ByteWriter();
+    stssPayload.u32(n);
+    for (let i = 0; i < n; i++) stssPayload.u32(i + 1);
+    const stssBox = new ByteWriter();
+    stssBox.fullBox('stss', 0, 0, stssPayload);
+
+    // ── stsz (sample sizes) ──
+    const stszPayload = new ByteWriter();
+    stszPayload.u32(0); // uniform size = 0 (variable)
+    stszPayload.u32(n);
+    for (const sz of sampleSizes) stszPayload.u32(sz);
+    const stszBox = new ByteWriter();
+    stszBox.fullBox('stsz', 0, 0, stszPayload);
+
+    // ── stsc (sample-to-chunk: 1 sample per chunk) ──
+    const stscPayload = new ByteWriter();
+    stscPayload.u32(1);  // entry count
+    stscPayload.u32(1);  // first chunk
+    stscPayload.u32(1);  // samples per chunk
+    stscPayload.u32(1);  // sample description index
+    const stscBox = new ByteWriter();
+    stscBox.fullBox('stsc', 0, 0, stscPayload);
+
+    // ── stco placeholder (patched after we know ftyp+moov size) ──
+    const stcoPayload = new ByteWriter();
+    stcoPayload.u32(n);
+    stcoPayload.zeros(n * 4); // placeholder offsets
+    const stcoBox = new ByteWriter();
+    stcoBox.fullBox('stco', 0, 0, stcoPayload);
+
+    // ── stbl ──
+    const stblPayload = new ByteWriter();
+    stblPayload.bytes(stsdBox.buf);
+    stblPayload.bytes(sttsBox.buf);
+    stblPayload.bytes(stssBox.buf);
+    stblPayload.bytes(stszBox.buf);
+    stblPayload.bytes(stscBox.buf);
+    stblPayload.bytes(stcoBox.buf);
+    const stblBox = new ByteWriter();
+    stblBox.box('stbl', stblPayload);
+
+    // ── dinf / dref / url ──
+    const urlPayload = new ByteWriter(); // empty payload, flags=1 (self-contained)
+    const urlBox = new ByteWriter();
+    urlBox.fullBox('url ', 0, 1, urlPayload);
+    const drefPayload = new ByteWriter();
+    drefPayload.u32(1);
+    drefPayload.bytes(urlBox.buf);
+    const drefBox = new ByteWriter();
+    drefBox.fullBox('dref', 0, 0, drefPayload);
+    const dinf = new ByteWriter();
+    dinf.box('dinf', drefBox);
+
+    // ── vmhd ──
+    const vmhdPayload = new ByteWriter();
+    vmhdPayload.u16(0); vmhdPayload.u16(0); vmhdPayload.u16(0); vmhdPayload.u16(0);
+    const vmhdBox = new ByteWriter();
+    vmhdBox.fullBox('vmhd', 0, 1, vmhdPayload);
+
+    // ── minf ──
+    const minfPayload = new ByteWriter();
+    minfPayload.bytes(vmhdBox.buf);
+    minfPayload.bytes(dinf.buf);
+    minfPayload.bytes(stblBox.buf);
+    const minfBox = new ByteWriter();
+    minfBox.box('minf', minfPayload);
+
+    // ── mdhd ──
+    const mdhdPayload = new ByteWriter();
+    mdhdPayload.u32(0); mdhdPayload.u32(0); // creation, modification
+    mdhdPayload.u32(timescale);
+    mdhdPayload.u32(totalDuration);
+    mdhdPayload.u16(0x55c4); // language 'und'
+    mdhdPayload.u16(0);
+    const mdhdBox = new ByteWriter();
+    mdhdBox.fullBox('mdhd', 0, 0, mdhdPayload);
+
+    // ── hdlr ──
+    const hdlrPayload = new ByteWriter();
+    hdlrPayload.u32(0); // pre_defined
+    hdlrPayload.str('vide');
+    hdlrPayload.zeros(12); // reserved
+    hdlrPayload.str('VideoHandler'); hdlrPayload.u8(0);
+    const hdlrBox = new ByteWriter();
+    hdlrBox.fullBox('hdlr', 0, 0, hdlrPayload);
+
+    // ── mdia ──
+    const mdiaPayload = new ByteWriter();
+    mdiaPayload.bytes(mdhdBox.buf);
+    mdiaPayload.bytes(hdlrBox.buf);
+    mdiaPayload.bytes(minfBox.buf);
+    const mdiaBox = new ByteWriter();
+    mdiaBox.box('mdia', mdiaPayload);
+
+    // ── tkhd ──
+    const tkhdPayload = new ByteWriter();
+    tkhdPayload.u32(0); tkhdPayload.u32(0); // creation, modification
+    tkhdPayload.u32(1);  // track ID
+    tkhdPayload.u32(0);  // reserved
+    tkhdPayload.u32(totalDuration);
+    tkhdPayload.zeros(8); // reserved
+    tkhdPayload.u16(0);   // layer
+    tkhdPayload.u16(0);   // alternate group
+    tkhdPayload.u16(0);   // volume (video = 0)
+    tkhdPayload.u16(0);   // reserved
+    // unity matrix
+    tkhdPayload.u32(0x00010000); tkhdPayload.u32(0); tkhdPayload.u32(0);
+    tkhdPayload.u32(0); tkhdPayload.u32(0x00010000); tkhdPayload.u32(0);
+    tkhdPayload.u32(0); tkhdPayload.u32(0); tkhdPayload.u32(0x40000000);
+    tkhdPayload.u32(width << 16);
+    tkhdPayload.u32(height << 16);
+    const tkhdBox = new ByteWriter();
+    tkhdBox.fullBox('tkhd', 0, 3, tkhdPayload); // flags=3: enabled+in-movie
+
+    // ── trak ──
+    const trakPayload = new ByteWriter();
+    trakPayload.bytes(tkhdBox.buf);
+    trakPayload.bytes(mdiaBox.buf);
+    const trakBox = new ByteWriter();
+    trakBox.box('trak', trakPayload);
+
+    // ── mvhd ──
+    const mvhdPayload = new ByteWriter();
+    mvhdPayload.u32(0); mvhdPayload.u32(0); // creation, modification
+    mvhdPayload.u32(timescale);
+    mvhdPayload.u32(totalDuration);
+    mvhdPayload.u32(0x00010000); // rate 1.0
+    mvhdPayload.u16(0x0100);     // volume 1.0
+    mvhdPayload.zeros(10);       // reserved
+    // unity matrix
+    mvhdPayload.u32(0x00010000); mvhdPayload.u32(0); mvhdPayload.u32(0);
+    mvhdPayload.u32(0); mvhdPayload.u32(0x00010000); mvhdPayload.u32(0);
+    mvhdPayload.u32(0); mvhdPayload.u32(0); mvhdPayload.u32(0x40000000);
+    mvhdPayload.zeros(24); // pre_defined
+    mvhdPayload.u32(2);    // next track ID
+    const mvhdBox = new ByteWriter();
+    mvhdBox.fullBox('mvhd', 0, 0, mvhdPayload);
+
+    // ── moov ──
+    const moovPayload = new ByteWriter();
+    moovPayload.bytes(mvhdBox.buf);
+    moovPayload.bytes(trakBox.buf);
+    const moovBox = new ByteWriter();
+    moovBox.box('moov', moovPayload);
+
+    // ── Compute real stco offsets and patch moov ──
+    // mdat starts at: ftypBox.length + moovBox.length + 8 (mdat size+type header)
+    const mdatPayloadSize = sampleSizes.reduce((a, b) => a + b, 0);
+    const mdatTotalSize = 8 + mdatPayloadSize;
+    const mdatStart = ftypBox.buf.length + moovBox.buf.length + 8;
+
+    // Find stco in moovBox.buf and patch offsets
+    const moovBuf = moovBox.buf; // plain number array
+    const SC = [0x73, 0x74, 0x63, 0x6f]; // 'stco'
+    let stcoPos = -1;
+    for (let i = 0; i < moovBuf.length - 4; i++) {
+      if (moovBuf[i] === SC[0] && moovBuf[i+1] === SC[1] && moovBuf[i+2] === SC[2] && moovBuf[i+3] === SC[3]) {
+        stcoPos = i;
+        break;
+      }
+    }
+    if (stcoPos >= 0) {
+      // stco layout after the 4-byte type: version(1)+flags(3)+entry_count(4)+entries
+      const entryStart = stcoPos + 4 + 4 + 4; // skip type(already at stcoPos) + ver+flags(4) + count(4)
+      let off = mdatStart;
+      for (let j = 0; j < n; j++) {
+        moovBuf[entryStart + j*4]     = (off >>> 24) & 0xff;
+        moovBuf[entryStart + j*4 + 1] = (off >>> 16) & 0xff;
+        moovBuf[entryStart + j*4 + 2] = (off >>> 8) & 0xff;
+        moovBuf[entryStart + j*4 + 3] = off & 0xff;
+        off += sampleSizes[j];
+      }
+    }
+
+    // ── Assemble final file ──
+    const totalBytes = ftypBox.buf.length + moovBox.buf.length + 8 + mdatPayloadSize;
+    const result = new Uint8Array(totalBytes);
+    let pos = 0;
+    const writeArr = (arr) => { result.set(arr instanceof Uint8Array ? arr : new Uint8Array(arr), pos); pos += arr.length; };
+    writeArr(ftypBox.buf);
+    writeArr(moovBox.buf);
+    // mdat header
+    result[pos++] = (mdatTotalSize >>> 24) & 0xff;
+    result[pos++] = (mdatTotalSize >>> 16) & 0xff;
+    result[pos++] = (mdatTotalSize >>> 8) & 0xff;
+    result[pos++] = mdatTotalSize & 0xff;
+    result[pos++] = 0x6d; result[pos++] = 0x64; result[pos++] = 0x61; result[pos++] = 0x74; // 'mdat'
+    for (const chunk of chunks) writeArr(chunk.data);
+    return result;
+  }
+
+  return { build };
+})();
+
+async function doExportMp4() {
+  if (!slides.length) return;
+
+  // Feature detection
+  if (typeof VideoEncoder === 'undefined') {
+    alert('MP4 export requires a browser with WebCodecs support.\nPlease use Chrome, Edge, or Safari 16.4+.\n\nYou can still export as GIF or PNG ZIP.');
+    return;
+  }
+
+  const prefix = document.getElementById('export-prefix').value || 'slide';
+  const fmt = EXPORT_FORMATS[selectedFmt];
+  const vidW = parseInt(document.getElementById('gif-size').value);
+  const vidH = Math.round(vidW * (fmt.h / fmt.w));
+  // Ensure dimensions are even (H.264 requirement)
+  const encW = vidW % 2 === 0 ? vidW : vidW - 1;
+  const encH = vidH % 2 === 0 ? vidH : vidH - 1;
+  const delayMs = parseInt(document.getElementById('gif-delay').value);
+  const timescale = 90000; // standard video timescale
+  const frameDuration = Math.round(delayMs * timescale / 1000);
+
+  const prog = document.getElementById('export-progress');
+  const pb   = document.getElementById('pb');
+  const status = document.getElementById('export-status');
+  prog.style.display = 'flex';
+  status.textContent = 'Initialising encoder…';
+  pb.style.width = '5%';
+
+  const chunks = []; // {data: Uint8Array, duration: number, config?: Uint8Array}
+  let encoderConfig = null;
+
+  const encoder = new VideoEncoder({
+    output(chunk, meta) {
+      const buf = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(buf);
+      const entry = { data: buf, duration: frameDuration };
+      if (meta && meta.decoderConfig && meta.decoderConfig.description) {
+        // Store avcC config from first keyframe
+        entry.config = new Uint8Array(meta.decoderConfig.description);
+        encoderConfig = entry.config;
+      }
+      chunks.push(entry);
+    },
+    error(e) {
+      console.error('VideoEncoder error:', e);
+      status.textContent = 'Encoding error: ' + e.message;
+    }
+  });
+
+  try {
+    await encoder.configure({
+      codec: 'avc1.42001f', // H.264 Baseline Profile Level 3.1
+      width: encW,
+      height: encH,
+      bitrate: 4_000_000, // 4 Mbps
+      framerate: 1,       // 1 fps — we control timing via timestamps
+      latencyMode: 'quality'
+    });
+  } catch (e) {
+    alert('Could not configure H.264 encoder. Your browser may not support this codec.\n\nError: ' + e.message);
+    prog.style.display = 'none';
+    return;
+  }
+
+  const offCanvas = document.createElement('canvas');
+  offCanvas.width = encW; offCanvas.height = encH;
+  const offCtx = offCanvas.getContext('2d');
+
+  let timestamp = 0;
+  for (let i = 0; i < slides.length; i++) {
+    status.textContent = `Encoding slide ${i + 1} of ${slides.length}…`;
+    pb.style.width = ((i + 0.5) / slides.length * 80) + '%';
+    await new Promise(r => setTimeout(r, 20));
+
+    const off = renderSlideToSize(slides[i], fmt.w, fmt.h);
+    offCtx.clearRect(0, 0, encW, encH);
+    offCtx.drawImage(off, 0, 0, encW, encH);
+
+    const frame = new VideoFrame(offCanvas, {
+      timestamp: timestamp,        // microseconds
+      duration: delayMs * 1000     // microseconds
+    });
+    encoder.encode(frame, { keyFrame: true }); // every slide is a keyframe
+    frame.close();
+    timestamp += delayMs * 1000;
+  }
+
+  status.textContent = 'Finalising MP4…';
+  pb.style.width = '88%';
+  await encoder.flush();
+  encoder.close();
+
+  // Propagate config to all chunks (needed for avcC box)
+  if (encoderConfig) {
+    chunks[0].config = encoderConfig;
+  }
+
+  const totalDuration = Math.round(timestamp * timescale / 1_000_000);
+  let mp4Bytes;
+  try {
+    mp4Bytes = Mp4Muxer.build(chunks, encW, encH, timescale, totalDuration);
+  } catch (e) {
+    console.error('MP4 mux error:', e);
+    status.textContent = 'MP4 mux error: ' + e.message;
+    return;
+  }
+
+  pb.style.width = '100%';
+  const blob = new Blob([mp4Bytes], { type: 'video/mp4' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${prefix}-${selectedFmt}.mp4`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  status.textContent = `Done! MP4 exported (${slides.length} slides, ${encW}×${encH}, ${(mp4Bytes.length / 1024 / 1024).toFixed(1)} MB).`;
+  setTimeout(closeExport, 2500);
+}
+
 // ─── BULK IMPORT ──────────────────────────────────────────────────────────────
 
 function showBulkImport() {
@@ -3094,6 +3834,17 @@ async function init() {
   loadSlideToUI();
   renderCurrent();
   updateUndoButtons();
+
+  // WebCodecs feature detection — disable MP4 button on unsupported browsers
+  if (typeof VideoEncoder === 'undefined') {
+    const mp4Btn = document.getElementById('btn-export-mp4');
+    if (mp4Btn) {
+      mp4Btn.disabled = true;
+      mp4Btn.title = 'MP4 export requires Chrome, Edge, or Safari 16.4+';
+      mp4Btn.style.opacity = '0.45';
+      mp4Btn.style.cursor = 'not-allowed';
+    }
+  }
 
   // Hide loading screen
   document.getElementById('loading-screen').style.display = 'none';
