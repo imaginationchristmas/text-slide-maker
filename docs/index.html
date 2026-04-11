@@ -351,15 +351,6 @@ body {
 .bg-corner-handle[data-corner="tr"] { cursor: nesw-resize; top: 0; left: 100%; }
 .bg-corner-handle[data-corner="bl"] { cursor: nesw-resize; top: 100%; left: 0; }
 .bg-corner-handle[data-corner="br"] { cursor: nwse-resize; top: 100%; left: 100%; }
-/* Text block selection box */
-#text-selection-box {
-  display: none;
-  position: absolute;
-  border: 1.5px dashed var(--accent);
-  pointer-events: none;
-  z-index: 8;
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.2);
-}
 
 #canvas-size-label {
   margin-top: 8px;
@@ -844,7 +835,6 @@ input[type=color] {
           <div class="bg-corner-handle" data-corner="bl"></div>
           <div class="bg-corner-handle" data-corner="br"></div>
         </div>
-        <div id="text-selection-box"></div>
       </div>
     </div>
     <div id="canvas-size-label">1080 × 1080 · Square</div>
@@ -1736,28 +1726,6 @@ function updateBgSelectionBox() {
   box.style.height = (dh * scale) + 'px';
 }
 
-// Position the text selection box overlay to match the selected text block.
-function updateTextSelectionBox() {
-  const box = document.getElementById('text-selection-box');
-  if (!slides.length || selectedTextIdx === null) { box.style.display = 'none'; return; }
-  const slide = slides[currentSlideIdx];
-  const tb = slide.textBlocks[selectedTextIdx];
-  if (!tb) { box.style.display = 'none'; return; }
-  const fmt = EXPORT_FORMATS[previewSize];
-  const scaleX = fmt.w / CANVAS_SIZE;
-  const lineCount = tb.text ? Math.max(1, tb.text.split('\n').length) : 1;
-  const estimatedH = lineCount * tb.fontSize * (tb.lineHeight || 1.3) + tb.fontSize;
-  // Text x/y in canvas-pixel space (same as design space for all formats since fmt.w = CANVAS_SIZE)
-  const cx = tb.x * scaleX;
-  const cy = tb.y;
-  const cw = tb.width * scaleX;
-  box.style.display = 'block';
-  box.style.left   = (cx * scale) + 'px';
-  box.style.top    = (cy * scale) + 'px';
-  box.style.width  = (cw * scale) + 'px';
-  box.style.height = (estimatedH * scale) + 'px';
-}
-
 // ─── PREVIEW SIZE ─────────────────────────────────────────────────────────────
 
 function setPreviewSize(key) {
@@ -1882,7 +1850,6 @@ overlay.addEventListener('mousedown', e => {
       selectedTextIdx = hit;
       selectTextBlock(hit);
       updateBgSelectionBox();
-      updateTextSelectionBox();
       overlay.style.cursor = 'grab';
     }
   } else if (slide.bgType === 'image' && slide.bgImage) {
@@ -1892,7 +1859,6 @@ overlay.addEventListener('mousedown', e => {
       selectedTextIdx = null;
       refreshTextPanel();
       updateBgSelectionBox();
-      updateTextSelectionBox();
       overlay.style.cursor = 'grab';
     } else {
       // Already selected — start pan drag
@@ -1910,7 +1876,6 @@ overlay.addEventListener('mousedown', e => {
     refreshTextPanel();
     overlay.style.cursor = 'default';
     updateBgSelectionBox();
-    updateTextSelectionBox();
   }
 });
 
@@ -2047,7 +2012,6 @@ window.addEventListener('mousemove', e => {
   document.getElementById('pos-y').value = tb.y;
   syncPosLabels(tb.x, tb.y);
   renderCurrent();
-  updateTextSelectionBox();
 });
 
 window.addEventListener('mouseup', () => {
@@ -2064,8 +2028,6 @@ window.addEventListener('mouseup', () => {
     scheduleSave();
   }
   if (dragging) {
-    // Text block drag ended — update selection box and save position
-    updateTextSelectionBox();
     pushUndoDebounced();
     scheduleSave();
   }
@@ -2112,7 +2074,6 @@ function selectSlide(i) {
   loadSlideToUI();
   renderCurrent();
   updateBgSelectionBox();
-  updateTextSelectionBox();
 }
 
 // Multi-select state
@@ -2331,7 +2292,6 @@ function selectTextBlock(i) {
   selectedTextIdx = i;
   refreshTextList();
   refreshTextPanel();
-  updateTextSelectionBox();
 }
 
 function refreshTextList() {
