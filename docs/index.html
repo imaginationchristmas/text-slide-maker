@@ -326,7 +326,6 @@ body {
   position: absolute; inset: 0;
   cursor: default;
   border-radius: 3px;
-  overflow: hidden;
 }
 /* Background image selection box + corner handles */
 #bg-selection-box {
@@ -352,6 +351,15 @@ body {
 .bg-corner-handle[data-corner="tr"] { cursor: nesw-resize; top: 0; left: 100%; }
 .bg-corner-handle[data-corner="bl"] { cursor: nesw-resize; top: 100%; left: 0; }
 .bg-corner-handle[data-corner="br"] { cursor: nwse-resize; top: 100%; left: 100%; }
+/* Text block selection box */
+#text-selection-box {
+  display: none;
+  position: absolute;
+  border: 1.5px dashed var(--accent);
+  pointer-events: none;
+  z-index: 8;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.2);
+}
 
 #canvas-size-label {
   margin-top: 8px;
@@ -829,12 +837,14 @@ input[type=color] {
     </div>
     <div id="canvas-wrap">
       <canvas id="main-canvas" width="1080" height="1080"></canvas>
-      <div id="canvas-overlay"></div>
-      <div id="bg-selection-box">
-        <div class="bg-corner-handle" data-corner="tl"></div>
-        <div class="bg-corner-handle" data-corner="tr"></div>
-        <div class="bg-corner-handle" data-corner="bl"></div>
-        <div class="bg-corner-handle" data-corner="br"></div>
+      <div id="canvas-overlay">
+        <div id="bg-selection-box">
+          <div class="bg-corner-handle" data-corner="tl"></div>
+          <div class="bg-corner-handle" data-corner="tr"></div>
+          <div class="bg-corner-handle" data-corner="bl"></div>
+          <div class="bg-corner-handle" data-corner="br"></div>
+        </div>
+        <div id="text-selection-box"></div>
       </div>
     </div>
     <div id="canvas-size-label">1080 × 1080 · Square</div>
@@ -1307,7 +1317,7 @@ let scale = 1;
 // Drag state
 let dragging = false;
 let dragOffX = 0, dragOffY = 0;
-// Background image drag state
+// Background image drag (pan) state
 let draggingBg = false;
 let bgDragStartX = 0, bgDragStartY = 0;
 let bgDragOriginX = 0, bgDragOriginY = 0;
@@ -1726,6 +1736,28 @@ function updateBgSelectionBox() {
   box.style.height = (dh * scale) + 'px';
 }
 
+// Position the text selection box overlay to match the selected text block.
+function updateTextSelectionBox() {
+  const box = document.getElementById('text-selection-box');
+  if (!slides.length || selectedTextIdx === null) { box.style.display = 'none'; return; }
+  const slide = slides[currentSlideIdx];
+  const tb = slide.textBlocks[selectedTextIdx];
+  if (!tb) { box.style.display = 'none'; return; }
+  const fmt = EXPORT_FORMATS[previewSize];
+  const scaleX = fmt.w / CANVAS_SIZE;
+  const lineCount = tb.text ? Math.max(1, tb.text.split('\n').length) : 1;
+  const estimatedH = lineCount * tb.fontSize * (tb.lineHeight || 1.3) + tb.fontSize;
+  // Text x/y in canvas-pixel space (same as design space for all formats since fmt.w = CANVAS_SIZE)
+  const cx = tb.x * scaleX;
+  const cy = tb.y;
+  const cw = tb.width * scaleX;
+  box.style.display = 'block';
+  box.style.left   = (cx * scale) + 'px';
+  box.style.top    = (cy * scale) + 'px';
+  box.style.width  = (cw * scale) + 'px';
+  box.style.height = (estimatedH * scale) + 'px';
+}
+
 // ─── PREVIEW SIZE ─────────────────────────────────────────────────────────────
 
 function setPreviewSize(key) {
@@ -1829,31 +1861,41 @@ document.querySelectorAll('.bg-corner-handle').forEach(handle => {
 
 overlay.addEventListener('mousedown', e => {
   if (!slides.length) return;
+  // Corner handles have their own handler
+  if (e.target.classList.contains('bg-corner-handle')) return;
   const slide = slides[currentSlideIdx];
   const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
 
   const hit = hitTestTextBlocks(slide, mx, my);
 
   if (hit >= 0) {
-    // Clicking a text block deselects bg image
-    bgSelected = false;
-    selectedTextIdx = hit;
-    dragging = true;
-    const tb = slide.textBlocks[hit];
-    dragOffX = mx - tb.x;
-    dragOffY = my - tb.y;
-    selectTextBlock(hit);
-    overlay.style.cursor = 'grabbing';
-    updateBgSelectionBox();
+    if (selectedTextIdx === hit) {
+      // Already selected — start drag
+      dragging = true;
+      const tb = slide.textBlocks[hit];
+      dragOffX = mx - tb.x;
+      dragOffY = my - tb.y;
+      overlay.style.cursor = 'grabbing';
+    } else {
+      // First click — select this text block, deselect image
+      bgSelected = false;
+      selectedTextIdx = hit;
+      selectTextBlock(hit);
+      updateBgSelectionBox();
+      updateTextSelectionBox();
+      overlay.style.cursor = 'grab';
+    }
   } else if (slide.bgType === 'image' && slide.bgImage) {
-    // Click bg image: select it (first click) or start pan (already selected)
     if (!bgSelected) {
+      // First click — select the image
       bgSelected = true;
       selectedTextIdx = null;
       refreshTextPanel();
       updateBgSelectionBox();
+      updateTextSelectionBox();
+      overlay.style.cursor = 'grab';
     } else {
-      // Already selected — start pan
+      // Already selected — start pan drag
       draggingBg = true;
       bgDragStartX = e.clientX;
       bgDragStartY = e.clientY;
@@ -1862,12 +1904,13 @@ overlay.addEventListener('mousedown', e => {
       overlay.style.cursor = 'grabbing';
     }
   } else {
-    // Click empty area — deselect
+    // Click on empty area — deselect everything
     bgSelected = false;
     selectedTextIdx = null;
     refreshTextPanel();
     overlay.style.cursor = 'default';
     updateBgSelectionBox();
+    updateTextSelectionBox();
   }
 });
 
@@ -1911,9 +1954,10 @@ overlay.addEventListener('mousemove', e => {
   if (!slides.length) return;
   const slide = slides[currentSlideIdx];
   const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
-  const onText = hitTestTextBlocks(slide, mx, my) >= 0;
-  if (onText) {
-    overlay.style.cursor = 'grab';
+  const hitIdx = hitTestTextBlocks(slide, mx, my);
+  if (hitIdx >= 0) {
+    // Show grab cursor on selected text, pointer on unselected
+    overlay.style.cursor = (hitIdx === selectedTextIdx) ? 'grab' : 'pointer';
   } else if (slide.bgType === 'image' && slide.bgImage) {
     overlay.style.cursor = bgSelected ? 'grab' : 'pointer';
   } else {
@@ -1991,6 +2035,7 @@ window.addEventListener('mousemove', e => {
     document.getElementById('bg-img-x-val').textContent = slide.bgImageX;
     document.getElementById('bg-img-y-val').textContent = slide.bgImageY;
     renderCurrent();
+    updateBgSelectionBox();
     return;
   }
   if (!dragging || selectedTextIdx === null) return;
@@ -2002,17 +2047,25 @@ window.addEventListener('mousemove', e => {
   document.getElementById('pos-y').value = tb.y;
   syncPosLabels(tb.x, tb.y);
   renderCurrent();
+  updateTextSelectionBox();
 });
 
 window.addEventListener('mouseup', () => {
   if (draggingBgResize) {
     draggingBgResize = null;
+    updateBgSelectionBox();
     pushUndoDebounced();
     scheduleSave();
   }
   if (draggingBg) {
     draggingBg = false;
     overlay.style.cursor = bgSelected ? 'grab' : 'default';
+    pushUndoDebounced();
+    scheduleSave();
+  }
+  if (dragging) {
+    // Text block drag ended — update selection box and save position
+    updateTextSelectionBox();
     pushUndoDebounced();
     scheduleSave();
   }
@@ -2058,6 +2111,8 @@ function selectSlide(i) {
   refreshSlidePicker();
   loadSlideToUI();
   renderCurrent();
+  updateBgSelectionBox();
+  updateTextSelectionBox();
 }
 
 // Multi-select state
@@ -2276,6 +2331,7 @@ function selectTextBlock(i) {
   selectedTextIdx = i;
   refreshTextList();
   refreshTextPanel();
+  updateTextSelectionBox();
 }
 
 function refreshTextList() {
