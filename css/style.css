@@ -696,6 +696,50 @@ input[type=color] {
 #export-box h3 { font-size: 15px; font-weight: 700; }
 #export-box p { font-size: 12px; color: var(--text2); line-height: 1.6; }
 
+/* ─── Help / Guide Modal ─────────────────────────────────────────────────────── */
+#help-modal {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.78);
+  z-index: 99;
+  align-items: center; justify-content: center;
+}
+#help-modal.show { display: flex; }
+#help-box {
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  padding: 22px;
+  width: 480px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 16px;
+}
+#help-box h3 { font-size: 15px; font-weight: 700; }
+#help-box p { font-size: 12px; color: var(--text2); line-height: 1.6; }
+.help-section { display: flex; flex-direction: column; gap: 6px; }
+.help-heading {
+  font-size: 10px; font-weight: 700; color: var(--accent);
+  text-transform: uppercase; letter-spacing: 0.07em;
+}
+.help-list { margin: 0; padding-left: 18px; font-size: 12px; color: var(--text2); line-height: 1.65; }
+.help-list li { margin-bottom: 3px; }
+.help-list b { color: var(--text); font-weight: 600; }
+.help-keys { display: flex; flex-direction: column; gap: 6px; }
+.help-keys > div { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+.help-keys span { margin-left: 4px; }
+.help-keys kbd {
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text);
+}
+
 .export-fmt-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; }
 .export-fmt {
   border: 1.5px solid var(--border2);

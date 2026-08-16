@@ -1845,6 +1845,16 @@ function showExport() {
   document.getElementById('export-modal').classList.add('show');
 }
 
+// ─── HELP / GUIDE MODAL ───────────────────────────────────────────────────────
+
+function showHelp() {
+  document.getElementById('help-modal').classList.add('show');
+}
+
+function closeHelp() {
+  document.getElementById('help-modal').classList.remove('show');
+}
+
 function closeExport() {
   document.getElementById('export-modal').classList.remove('show');
   document.getElementById('export-progress').style.display = 'none';
@@ -2700,6 +2710,11 @@ document.addEventListener('dblclick', e => {
 });
 
 document.addEventListener('keydown', e => {
+  // Esc closes the help modal
+  if (e.key === 'Escape' && document.getElementById('help-modal').classList.contains('show')) {
+    closeHelp();
+    return;
+  }
   // Undo/Redo — fire even when inputs are focused (standard app behaviour)
   if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
     e.preventDefault();

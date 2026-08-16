@@ -37,6 +37,7 @@
   <span id="slide-count">0 slides</span>
   <div class="tb-sep"></div>
   <button class="tb-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle light / dark mode" style="font-size:15px;padding:0 8px;">☀︎</button>
+  <button class="tb-btn" id="help-btn" onclick="showHelp()" title="Help, shortcuts & how to use the app" style="font-size:14px;padding:0 9px;font-weight:700;">?</button>
 </div>
 
 <div id="main">
@@ -55,15 +56,15 @@
   <!-- Center: Canvas -->
   <div id="canvas-area">
     <div id="size-bar">
-      <button class="size-btn active" id="sz-square" onclick="setPreviewSize('square')" title="Square format — 1080×1080 (Instagram post)">
+      <button class="size-btn active" id="sz-square" onclick="setPreviewSize('square')" title="Square format — 1080×1080">
         <span class="sz-icon" style="aspect-ratio:1/1;height:12px;"></span>
         Square<span class="sz-dim">1080×1080</span>
       </button>
-      <button class="size-btn" id="sz-portrait" onclick="setPreviewSize('portrait')" title="Portrait format — 1080×1350 (Instagram portrait)">
+      <button class="size-btn" id="sz-portrait" onclick="setPreviewSize('portrait')" title="Portrait format — 1080×1350">
         <span class="sz-icon" style="aspect-ratio:4/5;height:14px;"></span>
         Portrait<span class="sz-dim">1080×1350</span>
       </button>
-      <button class="size-btn" id="sz-story" onclick="setPreviewSize('story')" title="Story format — 1080×1920 (Instagram/TikTok story)">
+      <button class="size-btn" id="sz-story" onclick="setPreviewSize('story')" title="Story format — 1080×1920">
         <span class="sz-icon" style="aspect-ratio:9/16;height:16px;"></span>
         Story<span class="sz-dim">1080×1920</span>
       </button>
@@ -463,8 +464,63 @@ And this becomes slide three</div>
     <div style="display:flex;gap:7px;flex-wrap:wrap;">
       <button class="tb-btn primary" onclick="doExport()" title="Download all slides as PNG images in a ZIP file" style="flex:1;justify-content:center;min-width:120px;">↓ ZIP (PNG)</button>
       <button class="tb-btn" onclick="doExportGif()" title="Download all slides as an animated GIF" style="flex:1;justify-content:center;min-width:100px;">↓ GIF</button>
-      <button class="tb-btn" id="btn-export-mp4" onclick="doExportMp4()" title="Download all slides as an MP4 video (Instagram-compatible)" style="flex:1;justify-content:center;min-width:100px;">↓ MP4 (Video)</button>
+      <button class="tb-btn" id="btn-export-mp4" onclick="doExportMp4()" title="Download all slides as an MP4 video" style="flex:1;justify-content:center;min-width:100px;">↓ MP4 (Video)</button>
       <button class="tb-btn" onclick="closeExport()" title="Discard and close">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Help / Guide Modal -->
+<div id="help-modal" onclick="if(event.target===this)closeHelp()">
+  <div id="help-box">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <h3>Help & Shortcuts</h3>
+      <button class="tb-btn" onclick="closeHelp()" title="Close" style="padding:0 8px;">✕</button>
+    </div>
+
+    <div class="help-section">
+      <div class="help-heading">What is this?</div>
+      <p>Slide Maker turns plain text into polished, ready-to-share image slides — for social posts, stories, presentations, carousels, and more. Everything runs in your browser — your work is saved automatically on this device and never uploaded anywhere.</p>
+    </div>
+
+    <div class="help-section">
+      <div class="help-heading">Quick start</div>
+      <ol class="help-list">
+        <li>Click <b>+ New Slide</b> (or <b>✍ Write Slides</b> to create many at once from text).</li>
+        <li>Click the text on the canvas to select it, then type in the editor on the right.</li>
+        <li>Drag text to move it; drag the small handle on the box's right edge to change its width.</li>
+        <li>Pick a background (solid, gradient, or image) and style your text with the font, color, and effect controls.</li>
+        <li>Choose a canvas size (Square / Portrait / Story) above the canvas, then <b>↓ Export</b> as PNG, GIF, or MP4.</li>
+      </ol>
+    </div>
+
+    <div class="help-section">
+      <div class="help-heading">Working with text</div>
+      <ul class="help-list">
+        <li><b>Select / move:</b> click any text and drag it. The dashed box shows exactly where the words reach.</li>
+        <li><b>Width:</b> drag the box's right-edge handle, or use the <b>W</b> slider. Long words wrap automatically.</li>
+        <li><b>Position:</b> use the snap buttons (Left / Center / Right / Top / Bottom) to align text to the canvas edges.</li>
+        <li><b>Multiple blocks:</b> add more text blocks per slide from the Text section; each is positioned independently.</li>
+      </ul>
+    </div>
+
+    <div class="help-section">
+      <div class="help-heading">Keyboard shortcuts</div>
+      <div class="help-keys">
+        <div><kbd>←</kbd><kbd>→</kbd><span>Previous / next slide</span></div>
+        <div><kbd>↑</kbd><kbd>↓</kbd><span>Previous / next slide</span></div>
+        <div><kbd>D</kbd><span>Duplicate slide</span></div>
+        <div><kbd>N</kbd><span>New slide</span></div>
+        <div><kbd>Del</kbd><span>Delete slide</span></div>
+        <div><kbd>⌘/Ctrl</kbd>+<kbd>Z</kbd><span>Undo</span></div>
+        <div><kbd>⌘/Ctrl</kbd>+<kbd>⇧</kbd>+<kbd>Z</kbd><span>Redo</span></div>
+      </div>
+      <p style="margin-top:8px;">Tip: double-click any slider to reset it to its default value.</p>
+    </div>
+
+    <div class="help-section">
+      <div class="help-heading">Saving & your data</div>
+      <p>Your project auto-saves to this browser as you work. Use <b>⬇ Save</b> to download a project file you can back up or move to another computer, and <b>📂 Load</b> to open it again.</p>
     </div>
   </div>
 </div>
