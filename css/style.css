@@ -344,6 +344,30 @@ body {
 .bg-corner-handle[data-corner="bl"] { cursor: nesw-resize; top: 100%; left: 0; }
 .bg-corner-handle[data-corner="br"] { cursor: nwse-resize; top: 100%; left: 100%; }
 
+/* Selected text-block box + width resize handle */
+#text-selection-box {
+  display: none;
+  position: absolute;
+  border: 1.5px dashed var(--accent);
+  pointer-events: none;
+  z-index: 9;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
+}
+#text-width-handle {
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  width: 14px; height: 28px;
+  background: #fff;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  z-index: 10;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  cursor: ew-resize;
+  pointer-events: all;
+}
+
 #canvas-size-label {
   margin-top: 8px;
   font-size: 10px;

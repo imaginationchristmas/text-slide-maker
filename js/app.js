@@ -80,6 +80,15 @@ let scale = 1;
 // Drag state
 let dragging = false;
 let dragOffX = 0, dragOffY = 0;
+// Pending drag: set on mousedown over a text block; becomes a real drag
+// once the pointer moves beyond DRAG_THRESHOLD_PX (keeps plain clicks as selection).
+let dragPending = false;
+let dragStartClientX = 0, dragStartClientY = 0;
+const DRAG_THRESHOLD_PX = 4;
+// Text-box width resize drag state
+let draggingTextWidth = false;
+let textWidthDragStartX = 0; // pointer clientX at drag start
+let textWidthDragStartW = 0; // tb.width at drag start
 // Background image drag (pan) state
 let draggingBg = false;
 let bgDragStartX = 0, bgDragStartY = 0;
@@ -433,6 +442,19 @@ function wrapText(g, tb) {
       } else {
         line = test;
       }
+      // Break a single word that is wider than the box (no spaces to wrap on).
+      // Greedily split it into the largest chunks that fit, like CSS
+      // overflow-wrap: break-word, so text never escapes the box width.
+      while (g.measureText(line).width > tb.width && line.length > 1) {
+        let lo = 1, hi = line.length - 1, fit = 1;
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1;
+          if (g.measureText(line.slice(0, mid)).width <= tb.width) { fit = mid; lo = mid + 1; }
+          else hi = mid - 1;
+        }
+        lines.push(line.slice(0, fit));
+        line = line.slice(fit);
+      }
     });
     lines.push(line);
   });
@@ -443,10 +465,48 @@ function wrapTextSimple(tb) {
   return tb.text.split('\n');
 }
 
+// Shared measuring context so snap/position math uses the exact same
+// word-wrap logic and font metrics as the renderer (renderTextBlock).
+const _measureCtx = document.createElement('canvas').getContext('2d');
+
+// Returns the number of *visual* lines a text block occupies after wrapping,
+// matching what renderTextBlock() actually draws (incl. uppercase toggle).
+function wrappedLineCount(tb) {
+  const italic = tb.fontStyle === 'italic' ? 'italic ' : '';
+  _measureCtx.font = `${italic}${tb.fontWeight} ${tb.fontSize}px '${tb.fontFamily}', sans-serif`;
+  const tbWithCase = { ...tb, text: tb.uppercase ? tb.text.toUpperCase() : tb.text };
+  return wrapText(_measureCtx, tbWithCase).length;
+}
+
+// Pixel height of a text block as rendered (top baseline to bottom of last line).
+function textBlockHeight(tb) {
+  return wrappedLineCount(tb) * tb.fontSize * tb.lineHeight;
+}
+
+// Width of the widest *rendered* line (design px). This is the actual inked
+// extent, which is usually narrower than tb.width (the wrap boundary) because
+// words wrap before reaching the edge. Accounts for letter-spacing like
+// drawWithSpacing() does. Used to size the selection box to the visible text.
+function textBlockWidth(tb) {
+  const italic = tb.fontStyle === 'italic' ? 'italic ' : '';
+  _measureCtx.font = `${italic}${tb.fontWeight} ${tb.fontSize}px '${tb.fontFamily}', sans-serif`;
+  const tbWithCase = { ...tb, text: tb.uppercase ? tb.text.toUpperCase() : tb.text };
+  const lines = wrapText(_measureCtx, tbWithCase);
+  const spacing = tb.letterSpacing || 0;
+  let max = 0;
+  lines.forEach(line => {
+    let w = _measureCtx.measureText(line).width;
+    if (spacing !== 0 && line.length > 1) w += spacing * (line.length - 1);
+    if (w > max) max = w;
+  });
+  return max;
+}
+
 function renderCurrent() {
   if (!slides.length) {
     ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
     updateBgSelectionBox();
+    updateTextSelectionBox();
     return;
   }
   const fmt = EXPORT_FORMATS[previewSize];
@@ -455,6 +515,7 @@ function renderCurrent() {
   ctx.drawImage(off, 0, 0);
   updateThumbs();
   updateBgSelectionBox();
+  updateTextSelectionBox();
 }
 
 // Compute the rendered image rect in canvas-pixel space for the current slide.
@@ -499,6 +560,33 @@ function updateBgSelectionBox() {
   box.style.height = (dh * scale) + 'px';
 }
 
+// Position the dashed text-box overlay over the selected text block.
+// The box hugs the *actual rendered text extent* (widest line × wrapped height),
+// not the wrap boundary tb.width, so the border matches where the words reach.
+// Horizontal placement respects the block's text alignment. Design coords are
+// converted to canvas px (scaleX) then screen px (scale); Y design == canvas px.
+function updateTextSelectionBox() {
+  const box = document.getElementById('text-selection-box');
+  if (!box) return;
+  const tb = (slides.length && selectedTextIdx !== null)
+    ? slides[currentSlideIdx].textBlocks[selectedTextIdx] : null;
+  if (!tb) { box.style.display = 'none'; return; }
+  const fmt = EXPORT_FORMATS[previewSize];
+  const scaleX = fmt.w / CANVAS_SIZE;
+  const textW = textBlockWidth(tb);
+  const h = textBlockHeight(tb);
+  // Left edge of the inked text within the wrap box, by alignment.
+  let leftX = tb.x;
+  if (tb.align === 'right')       leftX = tb.x + tb.width - textW;
+  else if (tb.align === 'center') leftX = tb.x + (tb.width - textW) / 2;
+  box.style.display = 'block';
+  box.style.left   = (leftX * scaleX * scale) + 'px';
+  box.style.top    = (tb.y * scale) + 'px';
+  box.style.width  = (textW * scaleX * scale) + 'px';
+  box.style.height = (h * scale) + 'px';
+  // The width handle is a CSS-positioned child at the box's right edge.
+}
+
 // ─── PREVIEW SIZE ─────────────────────────────────────────────────────────────
 
 function setPreviewSize(key) {
@@ -531,6 +619,7 @@ function updateCanvasScale() {
   wrap.style.height = (fmt.h * scale) + 'px';
   mainCanvas.style.width  = (fmt.w * scale) + 'px';
   mainCanvas.style.height = (fmt.h * scale) + 'px';
+  updateTextSelectionBox();
 }
 
 // ─── COORDINATE CONVERSION ────────────────────────────────────────────────────
@@ -552,15 +641,16 @@ function screenToDesign(ex, ey) {
 
 const overlay = document.getElementById('canvas-overlay');
 
-// Shared hit test — uses generous font-size-based estimate, no font measurement.
-// Works reliably for new and loaded/saved slides regardless of font load state.
+// Shared hit test — measures the real wrapped text block (same logic as the
+// renderer) so the clickable region matches the visible glyphs. A small
+// margin makes the block easy to grab without overlapping neighbours.
 function hitTestTextBlocks(slide, mx, my) {
+  const M = 12; // design-px margin around the block for easier grabbing
   for (let i = slide.textBlocks.length - 1; i >= 0; i--) {
     const tb = slide.textBlocks[i];
-    const lineCount = tb.text ? Math.max(1, tb.text.split('\n').length) : 1;
-    const estimatedH = lineCount * tb.fontSize * (tb.lineHeight || 1.3) + tb.fontSize + 20;
-    if (mx >= tb.x - 20 && mx <= tb.x + tb.width + 20 &&
-        my >= tb.y - 20 && my <= tb.y + estimatedH) {
+    const h = textBlockHeight(tb);
+    if (mx >= tb.x - M && mx <= tb.x + tb.width + M &&
+        my >= tb.y - M && my <= tb.y + h + M) {
       return i;
     }
   }
@@ -600,6 +690,21 @@ document.querySelectorAll('.bg-corner-handle').forEach(handle => {
   });
 });
 
+// Text-box width handle — start width resize drag
+const textWidthHandle = document.getElementById('text-width-handle');
+if (textWidthHandle) {
+  textWidthHandle.addEventListener('mousedown', e => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!slides.length || selectedTextIdx === null) return;
+    const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
+    draggingTextWidth = true;
+    textWidthDragStartX = e.clientX;
+    textWidthDragStartW = tb.width;
+    overlay.style.cursor = 'ew-resize';
+  });
+}
+
 overlay.addEventListener('mousedown', e => {
   if (!slides.length) return;
   // Corner handles have their own handler
@@ -610,21 +715,22 @@ overlay.addEventListener('mousedown', e => {
   const hit = hitTestTextBlocks(slide, mx, my);
 
   if (hit >= 0) {
-    if (selectedTextIdx === hit) {
-      // Already selected — start drag
-      dragging = true;
-      const tb = slide.textBlocks[hit];
-      dragOffX = mx - tb.x;
-      dragOffY = my - tb.y;
-      overlay.style.cursor = 'grabbing';
-    } else {
-      // First click — select this text block, deselect image
+    // Select the block (if not already) and arm a pending drag so the user can
+    // press-and-move in a single motion. The drag only activates once the
+    // pointer travels past DRAG_THRESHOLD_PX, so a plain click still just selects.
+    if (selectedTextIdx !== hit) {
       bgSelected = false;
       selectedTextIdx = hit;
       selectTextBlock(hit);
       updateBgSelectionBox();
-      overlay.style.cursor = 'grab';
     }
+    const tb = slide.textBlocks[hit];
+    dragOffX = mx - tb.x;
+    dragOffY = my - tb.y;
+    dragStartClientX = e.clientX;
+    dragStartClientY = e.clientY;
+    dragPending = true;
+    overlay.style.cursor = 'grabbing';
   } else if (slide.bgType === 'image' && slide.bgImage) {
     if (!bgSelected) {
       // First click — select the image
@@ -632,6 +738,7 @@ overlay.addEventListener('mousedown', e => {
       selectedTextIdx = null;
       refreshTextPanel();
       updateBgSelectionBox();
+      updateTextSelectionBox();
       overlay.style.cursor = 'grab';
     } else {
       // Already selected — start pan drag
@@ -649,6 +756,7 @@ overlay.addEventListener('mousedown', e => {
     refreshTextPanel();
     overlay.style.cursor = 'default';
     updateBgSelectionBox();
+    updateTextSelectionBox();
   }
 });
 
@@ -688,7 +796,7 @@ overlay.addEventListener('dblclick', e => {
 
 // Update cursor on hover
 overlay.addEventListener('mousemove', e => {
-  if (dragging || draggingBg || draggingBgResize) return;
+  if (dragging || draggingBg || draggingBgResize || draggingTextWidth) return;
   if (!slides.length) return;
   const slide = slides[currentSlideIdx];
   const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
@@ -776,6 +884,31 @@ window.addEventListener('mousemove', e => {
     updateBgSelectionBox();
     return;
   }
+  // Text-box width resize drag — apply the pointer's horizontal delta to the
+  // width captured at drag start, so it tracks 1:1 regardless of alignment or
+  // where the handle sits on the box.
+  if (draggingTextWidth && selectedTextIdx !== null) {
+    const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
+    const fmt = EXPORT_FORMATS[previewSize];
+    const scaleX = fmt.w / CANVAS_SIZE;
+    const dDesign = (e.clientX - textWidthDragStartX) / (scale * scaleX);
+    const newW = Math.round(Math.max(40, Math.min(CANVAS_SIZE, textWidthDragStartW + dDesign)));
+    tb.width = newW;
+    const wInput = document.getElementById('pos-w');
+    if (wInput) wInput.value = newW;
+    syncPosLabels(tb.x, tb.y, newW);
+    renderCurrent();
+    return;
+  }
+  // Activate a pending text drag once the pointer moves past the threshold.
+  if (dragPending && !dragging) {
+    if (Math.hypot(e.clientX - dragStartClientX, e.clientY - dragStartClientY) >= DRAG_THRESHOLD_PX) {
+      dragging = true;
+      dragPending = false;
+    } else {
+      return;
+    }
+  }
   if (!dragging || selectedTextIdx === null) return;
   const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
   const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
@@ -804,8 +937,14 @@ window.addEventListener('mouseup', () => {
     pushUndoDebounced();
     scheduleSave();
   }
+  if (draggingTextWidth) {
+    draggingTextWidth = false;
+    pushUndoDebounced();
+    scheduleSave();
+  }
   dragging = false;
-  if (!draggingBg && !draggingBgResize) overlay.style.cursor = 'default';
+  dragPending = false;
+  if (!draggingBg && !draggingBgResize && !draggingTextWidth) overlay.style.cursor = 'default';
 });
 
 // ─── SLIDES MANAGEMENT ────────────────────────────────────────────────────────
@@ -1065,6 +1204,7 @@ function selectTextBlock(i) {
   selectedTextIdx = i;
   refreshTextList();
   refreshTextPanel();
+  updateTextSelectionBox();
 }
 
 function refreshTextList() {
@@ -1218,18 +1358,21 @@ function snapPos(dir) {
   pushUndo();
   const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
   const canvasH = EXPORT_FORMATS[previewSize].h;  // use current format height for vertical snaps
-  const pad = 80;
-  if (dir === 'left')     tb.x = pad;
-  if (dir === 'right')    tb.x = CANVAS_SIZE - tb.width - pad;
-  if (dir === 'center-h') tb.x = (CANVAS_SIZE - tb.width) / 2;
+  const pad = 48;
+  // Snap the *visible text extent* (not just the wrap box) so alignment is respected.
+  const textW = textBlockWidth(tb);
+  let offL = 0;                                    // text left edge offset from tb.x
+  if (tb.align === 'right')       offL = tb.width - textW;
+  else if (tb.align === 'center') offL = (tb.width - textW) / 2;
+  if (dir === 'left')     tb.x = pad - offL;
+  if (dir === 'right')    tb.x = CANVAS_SIZE - pad - offL - textW;
+  if (dir === 'center-h') tb.x = (CANVAS_SIZE - textW) / 2 - offL;
   if (dir === 'top')      tb.y = pad;
   if (dir === 'bottom') {
-    const lines = wrapTextSimple(tb).length;
-    tb.y = canvasH - lines * tb.fontSize * tb.lineHeight - pad;
+    tb.y = canvasH - textBlockHeight(tb) - pad;
   }
   if (dir === 'center-v') {
-    const lines = wrapTextSimple(tb).length;
-    tb.y = (canvasH - lines * tb.fontSize * tb.lineHeight) / 2;
+    tb.y = (canvasH - textBlockHeight(tb)) / 2;
   }
   document.getElementById('pos-x').value = Math.round(tb.x);
   document.getElementById('pos-y').value = Math.round(tb.y);
