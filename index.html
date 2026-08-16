@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Slide Maker by NOICE</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Loading Screen -->
+<div id="loading-screen">
+  <h1>SLIDE MAKER</h1>
+  <div class="loading-dots"><span></span><span></span><span></span></div>
+  <p>Loading fonts…</p>
+</div>
+
+<!-- Toolbar -->
+<div id="toolbar">
+  <h1>SLIDE MAKER</h1>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="addSlide()" title="Add a new blank slide">+ New Slide</button>
+  <button class="tb-btn" onclick="duplicateSlide()" title="Duplicate the current slide">Duplicate</button>
+  <button class="tb-btn purple" onclick="showBulkImport()" title="Write multiple slides at once using text">✍ Write Slides</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="undo-btn" onclick="undo()" title="Undo (⌘Z)" disabled>↩ Undo</button>
+  <button class="tb-btn" id="redo-btn" onclick="redo()" title="Redo (⌘⇧Z)" disabled>↪ Redo</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="exportProject()" title="Save project as JSON">⬇ Save</button>
+  <label class="tb-btn" title="Load project from JSON" style="cursor:pointer;">
+    📂 Load<input type="file" accept=".json" style="display:none" onchange="importProject(event)">
+  </label>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="showAnimPreview()" title="Preview your slides as an animation">▶ Preview</button>
+  <button class="tb-btn primary" onclick="showExport()" title="Export slides as PNG images in a ZIP file">↓ Export</button>
+  <span id="slide-count">0 slides</span>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle light / dark mode" style="font-size:15px;padding:0 8px;">☀︎</button>
+</div>
+
+<div id="main">
+
+  <!-- Left: Slide List -->
+  <div id="slides-panel">
+    <div id="slides-header">
+      <span>Slides</span>
+      <button id="bulk-del-btn" onclick="bulkDeleteSlides()" title="Delete selected slides"
+        style="display:none;background:rgba(220,50,50,0.25);color:#ff6b6b;font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px;border:1px solid rgba(220,50,50,0.4);cursor:pointer;white-space:nowrap;line-height:1.4;">✕ Delete</button>
+      <button class="add-slide-btn" onclick="addSlide()" title="Add slide">+</button>
+    </div>
+    <div id="slides-list"></div>
+  </div>
+
+  <!-- Center: Canvas -->
+  <div id="canvas-area">
+    <div id="size-bar">
+      <button class="size-btn active" id="sz-square" onclick="setPreviewSize('square')" title="Square format — 1080×1080 (Instagram post)">
+        <span class="sz-icon" style="aspect-ratio:1/1;height:12px;"></span>
+        Square<span class="sz-dim">1080×1080</span>
+      </button>
+      <button class="size-btn" id="sz-portrait" onclick="setPreviewSize('portrait')" title="Portrait format — 1080×1350 (Instagram portrait)">
+        <span class="sz-icon" style="aspect-ratio:4/5;height:14px;"></span>
+        Portrait<span class="sz-dim">1080×1350</span>
+      </button>
+      <button class="size-btn" id="sz-story" onclick="setPreviewSize('story')" title="Story format — 1080×1920 (Instagram/TikTok story)">
+        <span class="sz-icon" style="aspect-ratio:9/16;height:16px;"></span>
+        Story<span class="sz-dim">1080×1920</span>
+      </button>
+    </div>
+    <div id="canvas-wrap">
+      <canvas id="main-canvas" width="1080" height="1080"></canvas>
+      <div id="canvas-overlay">
+        <div id="bg-selection-box">
+          <div class="bg-corner-handle" data-corner="tl"></div>
+          <div class="bg-corner-handle" data-corner="tr"></div>
+          <div class="bg-corner-handle" data-corner="bl"></div>
+          <div class="bg-corner-handle" data-corner="br"></div>
+        </div>
+      </div>
+    </div>
+    <div id="canvas-size-label">1080 × 1080 · Square</div>
+  </div>
+
+  <!-- Right: Controls -->
+  <div id="controls-panel">
+
+    <!-- Background -->
+    <div class="ctrl-section">
+      <span class="ctrl-label">Background</span>
+      <div class="bg-tabs">
+        <button class="bg-tab active" id="bg-solid-tab" onclick="setBgType('solid')" title="Use a solid color background">Solid</button>
+        <button class="bg-tab" id="bg-grad-tab" onclick="setBgType('gradient')" title="Use a gradient background">Gradient</button>
+        <button class="bg-tab" id="bg-image-tab" onclick="setBgType('image')" title="Use a photo as the background">Image</button>
+      </div>
+
+      <div id="bg-solid-ctrl">
+        <div class="ctrl-row">
+          <input type="color" id="bg-color" value="#1a1a2e" oninput="updateBg()">
+          <span class="small-label">Background color</span>
+        </div>
+        <div class="color-presets" id="bg-presets"></div>
+      </div>
+
+      <div id="bg-image-ctrl" style="display:none">
+        <div class="ctrl-row" style="flex-direction:column;align-items:stretch;gap:6px;">
+          <label class="tb-btn" style="cursor:pointer;justify-content:center;text-align:center;">
+            📷 Upload Image
+            <input type="file" accept="image/*" style="display:none" onchange="setBgImage(event)">
+          </label>
+          <div id="bg-image-preview" style="display:none;position:relative;">
+            <img id="bg-img-thumb" style="width:100%;border-radius:4px;display:block;" alt="">
+            <button onclick="clearBgImage()" title="Remove background image" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);border:none;color:#fff;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:11px;">✕</button>
+          </div>
+          <div class="ctrl-row" style="gap:6px;margin-top:2px;">
+            <span class="small-label">Fit:</span>
+            <select id="bg-image-fit" onchange="updateBgImageFit()" style="flex:1;">
+              <option value="cover">Cover (fill)</option>
+              <option value="contain">Contain (letterbox)</option>
+              <option value="stretch">Stretch</option>
+            </select>
+          </div>
+          <div id="bg-image-offset-rows" style="display:none">
+            <div class="ctrl-row">
+              <span class="small-label" style="width:28px;">X</span>
+              <input type="range" min="-540" max="540" value="0" id="bg-img-x" data-default="0"
+                oninput="updateBgImageOffset(); document.getElementById('bg-img-x-val').textContent=this.value" style="flex:1;">
+              <span class="small-label" id="bg-img-x-val" style="width:32px;text-align:right;">0</span>
+            </div>
+            <div class="ctrl-row">
+              <span class="small-label" style="width:28px;">Y</span>
+              <input type="range" min="-540" max="540" value="0" id="bg-img-y" data-default="0"
+                oninput="updateBgImageOffset(); document.getElementById('bg-img-y-val').textContent=this.value" style="flex:1;">
+              <span class="small-label" id="bg-img-y-val" style="width:32px;text-align:right;">0</span>
+            </div>
+            <div class="ctrl-row">
+              <span class="small-label" style="width:28px;">Zoom</span>
+              <input type="range" min="10" max="300" value="100" id="bg-img-scale" data-default="100"
+                oninput="updateBgImageOffset(); document.getElementById('bg-img-scale-val').textContent=this.value+'%'" style="flex:1;"
+                title="Scale the background image up or down">
+              <span class="small-label" id="bg-img-scale-val" style="width:36px;text-align:right;">100%</span>
+            </div>
+            <div class="ctrl-row" style="margin-top:4px;">
+              <input type="color" id="bg-img-bgcolor" value="#1a1a2e" oninput="updateBgImgColor()" title="Background color shown behind the image">
+              <span class="small-label" style="margin-left:4px;">Background color</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="bg-grad-ctrl" style="display:none">
+        <div class="ctrl-row">
+          <input type="color" id="grad-c1" value="#1a1a2e" oninput="updateBg()">
+          <span class="small-label">From</span>
+          <input type="color" id="grad-c2" value="#4a0072" oninput="updateBg()">
+          <span class="small-label">To</span>
+        </div>
+        <div class="ctrl-row">
+          <span class="small-label">Angle</span>
+          <input type="range" min="0" max="360" value="135" id="grad-angle" data-default="135"
+            oninput="updateBg(); document.getElementById('grad-angle-val').textContent=this.value+'°'">
+          <span class="small-label" id="grad-angle-val">135°</span>
+        </div>
+        <div class="grad-presets" id="grad-presets"></div>
+      </div>
+
+      <button class="apply-all-btn" onclick="applyBgToAll()" title="Copy this slide's background to every other slide">Apply background to all slides</button>
+    </div>
+
+    <!-- Text Blocks -->
+    <div class="ctrl-section">
+      <span class="ctrl-label">Text Blocks</span>
+      <div id="text-blocks-list"></div>
+      <button class="add-text-btn" onclick="addTextBlock()" title="Add a new text block to this slide">+ Add Text Block</button>
+    </div>
+
+    <!-- Text Content (shown when block selected) -->
+    <div class="ctrl-section" id="text-editor" style="display:none">
+      <span class="ctrl-label">Text Content</span>
+      <textarea id="text-content" placeholder="Type your text…" oninput="updateTextBlock()"></textarea>
+    </div>
+
+    <!-- Font Controls (shown when block selected) -->
+    <div class="ctrl-section" id="font-controls" style="display:none">
+      <span class="ctrl-label">Font</span>
+      <div class="ctrl-row">
+        <select id="font-family" onchange="onFontFamilyChange()" style="flex:1;"></select>
+      </div>
+      <div class="ctrl-row font-weight-row">
+        <select id="font-weight" onchange="updateTextBlock()" style="flex:1;"></select>
+        <select id="font-style" onchange="updateTextBlock()" style="width:90px;">
+          <option value="normal">Normal</option>
+          <option value="italic">Italic</option>
+        </select>
+      </div>
+      <div class="ctrl-row">
+        <span class="small-label">Size</span>
+        <input type="range" min="10" max="300" value="80" id="font-size" data-default="80"
+          oninput="updateTextBlock(); document.getElementById('font-size-num').value=this.value"
+          style="flex:1;">
+        <input type="number" id="font-size-num" value="80" min="10" max="300"
+          oninput="document.getElementById('font-size').value=this.value; updateTextBlock()"
+          style="width:56px;">
+      </div>
+      <div class="ctrl-row">
+        <span class="small-label">Leading</span>
+        <input type="range" min="0.7" max="2.5" step="0.05" value="1.2" id="line-height" data-default="1.2"
+          oninput="updateTextBlock(); document.getElementById('lh-val').textContent=parseFloat(this.value).toFixed(2)">
+        <span class="small-label" id="lh-val">1.20</span>
+      </div>
+      <div class="ctrl-row">
+        <span class="small-label">Tracking</span>
+        <input type="range" min="-10" max="40" step="0.5" value="0" id="letter-spacing" data-default="0"
+          oninput="updateTextBlock(); document.getElementById('ls-val').textContent=parseFloat(this.value).toFixed(1)">
+        <span class="small-label" id="ls-val">0.0</span>
+      </div>
+    </div>
+
+    <!-- Text Color (shown when block selected) -->
+    <div class="ctrl-section" id="color-controls" style="display:none">
+      <span class="ctrl-label">Text Color</span>
+      <div class="ctrl-row">
+        <input type="color" id="text-color" value="#ffffff" oninput="updateTextBlock()">
+        <span class="small-label">Color</span>
+        <input type="range" min="0" max="100" value="100" id="text-opacity" data-default="100"
+          oninput="updateTextBlock(); document.getElementById('op-val').textContent=this.value+'%'">
+        <span class="small-label" id="op-val">100%</span>
+      </div>
+      <div class="color-presets" id="text-color-presets"></div>
+    </div>
+
+    <!-- Alignment + Uppercase (shown when block selected) -->
+    <div class="ctrl-section" id="align-controls" style="display:none">
+      <span class="ctrl-label">Alignment</span>
+      <div class="ctrl-row">
+        <div class="align-btns">
+          <button class="align-btn active" id="align-left" onclick="setAlign('left')" title="Align text to the left">Left</button>
+          <button class="align-btn" id="align-center" onclick="setAlign('center')" title="Center the text horizontally">Center</button>
+          <button class="align-btn" id="align-right" onclick="setAlign('right')" title="Align text to the right">Right</button>
+        </div>
+      </div>
+      <div class="ctrl-row toggle-row" style="margin-top:8px;">
+        <span class="toggle-label">UPPERCASE</span>
+        <label class="toggle">
+          <input type="checkbox" id="text-uppercase" onchange="updateTextBlock()">
+          <span class="toggle-track"></span>
+          <span class="toggle-thumb"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Text Effects (shown when block selected) -->
+    <div class="ctrl-section" id="effects-controls" style="display:none">
+      <span class="ctrl-label">Text Effects</span>
+      <!-- Shadow -->
+      <div class="ctrl-row toggle-row">
+        <span class="toggle-label">Shadow</span>
+        <label class="toggle">
+          <input type="checkbox" id="shadow-on" onchange="toggleShadowFields(); updateTextBlock()">
+          <span class="toggle-track"></span>
+          <span class="toggle-thumb"></span>
+        </label>
+      </div>
+      <div id="shadow-fields" style="display:none">
+        <div class="ctrl-row">
+          <span class="small-label">Color</span>
+          <input type="color" id="shadow-color" value="#000000" oninput="updateTextBlock()">
+          <input type="range" min="0" max="100" value="60" id="shadow-opacity" data-default="60"
+            oninput="updateTextBlock(); document.getElementById('sh-op-val').textContent=this.value+'%'" style="flex:1;">
+          <span class="small-label" id="sh-op-val">60%</span>
+        </div>
+        <div class="ctrl-row">
+          <span class="small-label" style="width:28px;">X</span>
+          <input type="range" min="-60" max="60" value="4" id="shadow-x" data-default="4"
+            oninput="updateTextBlock(); document.getElementById('sh-x-val').textContent=this.value" style="flex:1;">
+          <span class="small-label" id="sh-x-val" style="width:24px;text-align:right;">4</span>
+        </div>
+        <div class="ctrl-row">
+          <span class="small-label" style="width:28px;">Y</span>
+          <input type="range" min="-60" max="60" value="4" id="shadow-y" data-default="4"
+            oninput="updateTextBlock(); document.getElementById('sh-y-val').textContent=this.value" style="flex:1;">
+          <span class="small-label" id="sh-y-val" style="width:24px;text-align:right;">4</span>
+        </div>
+        <div class="ctrl-row">
+          <span class="small-label" style="width:28px;">Blur</span>
+          <input type="range" min="0" max="80" value="8" id="shadow-blur" data-default="8"
+            oninput="updateTextBlock(); document.getElementById('sh-bl-val').textContent=this.value" style="flex:1;">
+          <span class="small-label" id="sh-bl-val" style="width:24px;text-align:right;">8</span>
+        </div>
+      </div>
+      <!-- Stroke -->
+      <div class="ctrl-row toggle-row" style="margin-top:8px;">
+        <span class="toggle-label">Stroke (Outline)</span>
+        <label class="toggle">
+          <input type="checkbox" id="stroke-on" onchange="toggleStrokeFields(); updateTextBlock()">
+          <span class="toggle-track"></span>
+          <span class="toggle-thumb"></span>
+        </label>
+      </div>
+      <div id="stroke-fields" style="display:none">
+        <div class="ctrl-row">
+          <span class="small-label">Color</span>
+          <input type="color" id="stroke-color" value="#000000" oninput="updateTextBlock()">
+          <span class="small-label">Width</span>
+          <input type="range" min="1" max="20" value="2" id="stroke-width" data-default="2"
+            oninput="updateTextBlock(); document.getElementById('sw-val').textContent=this.value+'px'" style="flex:1;">
+          <span class="small-label" id="sw-val">2px</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Position (shown when block selected) -->
+    <div class="ctrl-section" id="pos-controls" style="display:none">
+      <span class="ctrl-label">Position</span>
+      <div class="ctrl-row">
+        <span class="small-label" style="width:28px;">X</span>
+        <input type="range" min="0" max="1080" value="80" id="pos-x" data-default="80"
+          oninput="updatePosFromInput(); document.getElementById('pos-x-val').textContent=this.value" style="flex:1;">
+        <span class="small-label" id="pos-x-val" style="width:32px;text-align:right;">80</span>
+      </div>
+      <div class="ctrl-row">
+        <span class="small-label" style="width:28px;">Y</span>
+        <input type="range" min="0" max="1920" value="400" id="pos-y" data-default="400"
+          oninput="updatePosFromInput(); document.getElementById('pos-y-val').textContent=this.value" style="flex:1;">
+        <span class="small-label" id="pos-y-val" style="width:32px;text-align:right;">400</span>
+      </div>
+      <div class="ctrl-row">
+        <span class="small-label" style="width:28px;">W</span>
+        <input type="range" min="100" max="1080" value="920" id="pos-w" data-default="920"
+          oninput="updatePosFromInput(); document.getElementById('pos-w-val').textContent=this.value" style="flex:1;">
+        <span class="small-label" id="pos-w-val" style="width:32px;text-align:right;">920</span>
+      </div>
+      <div class="snap-btns">
+        <button class="snap-btn" onclick="snapPos('left')" title="Snap text block to the left edge">⟵ Left</button>
+        <button class="snap-btn" onclick="snapPos('center-h')" title="Center text block horizontally">↔ H Center</button>
+        <button class="snap-btn" onclick="snapPos('right')" title="Snap text block to the right edge">Right ⟶</button>
+        <button class="snap-btn" onclick="snapPos('top')" title="Snap text block to the top edge">↑ Top</button>
+        <button class="snap-btn" onclick="snapPos('center-v')" title="Center text block vertically">↕ V Center</button>
+        <button class="snap-btn" onclick="snapPos('bottom')" title="Snap text block to the bottom edge">↓ Bottom</button>
+      </div>
+      <button class="apply-all-btn" onclick="applyFormatToAll()" title="Copy all text blocks (style, font, size, position) from this slide to every other slide — each slide keeps its own text content">Apply text layout to all slides</button>
+    </div>
+
+  </div><!-- /controls-panel -->
+</div><!-- /main -->
+
+<!-- Keyboard shortcut hint -->
+<div id="kb-hint">← → navigate slides · Del delete · D duplicate</div>
+
+<!-- Bulk Import Modal -->
+<div id="bulk-modal" onclick="if(event.target===this)closeBulkImport()">
+  <div id="bulk-box">
+    <div style="padding:18px 22px 0; border-bottom:1px solid var(--border); padding-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+        <h3>Write Slides</h3>
+        <button onclick="closeBulkImport()" title="Close" style="background:none;border:none;color:var(--text2);font-size:17px;cursor:pointer;line-height:1;">✕</button>
+      </div>
+      <p style="font-size:12px;color:var(--text2);line-height:1.6;">
+        Type or paste your text below. Use <code style="background:var(--panel2);padding:1px 5px;border-radius:3px;font-size:11px;color:var(--accent);">---</code> on its own line to break to the next slide.
+      </p>
+    </div>
+    <div style="padding:12px 22px 0;">
+      <div class="bulk-hint">Slide one text here
+---
+Slide two text here
+It can span multiple lines
+---
+And this becomes slide three</div>
+    </div>
+    <div style="padding:12px 22px;flex:1;display:flex;flex-direction:column;gap:9px;overflow-y:auto;">
+      <textarea id="bulk-input" placeholder="Start writing… use --- to break to next slide"
+        style="flex:1;min-height:200px;resize:none;font-size:13px;line-height:1.8;font-family:inherit;background:var(--panel2);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:12px;outline:none;"
+        oninput="updateBulkPreview()"></textarea>
+      <div>
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">
+          Preview — <span id="bulk-slide-count" style="color:var(--text2);">0 slides</span>
+        </div>
+        <div id="bulk-chips"></div>
+      </div>
+    </div>
+    <div style="padding:12px 22px 18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer;">
+          <input type="checkbox" id="bulk-append" style="accent-color:var(--accent);">
+          Append to existing slides
+        </label>
+        <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer;">
+          <input type="checkbox" id="bulk-inherit" checked style="accent-color:var(--accent);">
+          Inherit current style
+        </label>
+      </div>
+      <div style="display:flex;gap:7px;">
+        <button class="tb-btn primary" onclick="doBulkImport()" title="Create slides from the text above" style="flex:1;justify-content:center;height:34px;font-size:13px;">Generate Slides</button>
+        <button class="tb-btn" onclick="closeBulkImport()" title="Discard and close" style="height:34px;">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Animation Preview Overlay -->
+<div id="anim-overlay" onclick="if(event.target===this)closeAnim()">
+  <canvas id="anim-canvas" width="540" height="540"></canvas>
+  <div id="anim-controls">
+    <button class="tb-btn" onclick="animPrev()" title="Go to previous slide">‹ Prev</button>
+    <button class="tb-btn" onclick="toggleAnimPlay()" id="play-btn" title="Play or pause the slideshow">▶ Play</button>
+    <button class="tb-btn" onclick="animNext()" title="Go to next slide">Next ›</button>
+    <button class="tb-btn danger" onclick="closeAnim()" title="Close preview">✕ Close</button>
+  </div>
+  <div id="anim-info"></div>
+</div>
+
+<!-- Export Modal -->
+<div id="export-modal" onclick="if(event.target===this)closeExport()">
+  <div id="export-box">
+    <h3>Export Slides</h3>
+    <p>Choose a format — your text and layout will be scaled to fit each size automatically.</p>
+    <div class="export-fmt-grid">
+      <div class="export-fmt active" id="fmt-square" onclick="selectFmt('square')">
+        <div class="fmt-icon" style="aspect-ratio:1/1;"><span>1:1</span></div>
+        <div class="fmt-name">Square</div>
+        <div class="fmt-dim">1080 × 1080</div>
+      </div>
+      <div class="export-fmt" id="fmt-portrait" onclick="selectFmt('portrait')">
+        <div class="fmt-icon" style="aspect-ratio:4/5;"><span>4:5</span></div>
+        <div class="fmt-name">Portrait</div>
+        <div class="fmt-dim">1080 × 1350</div>
+      </div>
+      <div class="export-fmt" id="fmt-story" onclick="selectFmt('story')">
+        <div class="fmt-icon" style="aspect-ratio:9/16;"><span>9:16</span></div>
+        <div class="fmt-name">Story</div>
+        <div class="fmt-dim">1080 × 1920</div>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px;">Filename prefix</div>
+      <input type="text" id="export-prefix" value="slide" placeholder="e.g. my-post">
+    </div>
+    <!-- GIF / Video options -->
+    <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;">GIF / Video Options</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:11px;color:var(--text2);width:90px;">Frame delay</span>
+        <input type="range" id="gif-delay" min="200" max="5000" step="100" value="1500" style="flex:1;"
+          oninput="document.getElementById('gif-delay-val').textContent=(this.value/1000).toFixed(1)+'s'">
+        <span id="gif-delay-val" style="font-size:11px;color:var(--text2);width:32px;text-align:right;">1.5s</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:11px;color:var(--text2);width:90px;">Export size</span>
+        <select id="gif-size" style="flex:1;background:var(--panel2);border:1px solid var(--border2);color:var(--text);border-radius:4px;padding:3px 6px;font-size:11px;">
+          <option value="1080" selected>Full — 1080px wide</option>
+          <option value="720">Medium — 720px wide</option>
+          <option value="540">Small — 540px wide</option>
+        </select>
+      </div>
+    </div>
+    <div id="export-progress" style="display:none;flex-direction:column;gap:7px;">
+      <div class="progress-bar-wrap"><div class="progress-bar" id="pb"></div></div>
+      <span id="export-status" style="font-size:11px;color:var(--text2);">Exporting…</span>
+    </div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;">
+      <button class="tb-btn primary" onclick="doExport()" title="Download all slides as PNG images in a ZIP file" style="flex:1;justify-content:center;min-width:120px;">↓ ZIP (PNG)</button>
+      <button class="tb-btn" onclick="doExportGif()" title="Download all slides as an animated GIF" style="flex:1;justify-content:center;min-width:100px;">↓ GIF</button>
+      <button class="tb-btn" id="btn-export-mp4" onclick="doExportMp4()" title="Download all slides as an MP4 video (Instagram-compatible)" style="flex:1;justify-content:center;min-width:100px;">↓ MP4 (Video)</button>
+      <button class="tb-btn" onclick="closeExport()" title="Discard and close">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
