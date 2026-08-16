@@ -1210,6 +1210,24 @@ function addTextBlock() {
   if (!slides.length) return;
   pushUndo();
   const tb = makeTextBlock();
+  const blocks = slides[currentSlideIdx].textBlocks;
+  // Inherit the formatting of an existing block on this slide (prefer the
+  // currently-selected one, else the last), so new text matches the style the
+  // user already set up. Position and text stay fresh so blocks don't stack.
+  const src = (selectedTextIdx !== null && blocks[selectedTextIdx])
+    ? blocks[selectedTextIdx]
+    : blocks[blocks.length - 1];
+  if (src) {
+    const STYLE_KEYS = [
+      'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'uppercase',
+      'color', 'opacity', 'align', 'lineHeight', 'letterSpacing', 'width',
+      'shadowOn', 'shadowColor', 'shadowOpacity', 'shadowX', 'shadowY', 'shadowBlur',
+      'strokeOn', 'strokeColor', 'strokeWidth'
+    ];
+    STYLE_KEYS.forEach(k => { tb[k] = src[k]; });
+    // Nudge down so the new block doesn't sit exactly on top of the source.
+    tb.y = src.y + Math.round(src.fontSize * src.lineHeight) + 20;
+  }
   slides[currentSlideIdx].textBlocks.push(tb);
   selectedTextIdx = slides[currentSlideIdx].textBlocks.length - 1;
   refreshTextList();
