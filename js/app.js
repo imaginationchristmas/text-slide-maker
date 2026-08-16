@@ -87,8 +87,7 @@ let dragStartClientX = 0, dragStartClientY = 0;
 const DRAG_THRESHOLD_PX = 4;
 // Text-box width resize drag state
 let draggingTextWidth = false;
-let textWidthDragStartX = 0; // pointer clientX at drag start
-let textWidthDragStartW = 0; // tb.width at drag start
+let textWidthGrabOffset = 0; // design-px offset from pointer to the box's right edge at grab
 // Background image drag (pan) state
 let draggingBg = false;
 let bgDragStartX = 0, bgDragStartY = 0;
@@ -573,16 +572,25 @@ function updateTextSelectionBox() {
   if (!tb) { box.style.display = 'none'; return; }
   const fmt = EXPORT_FORMATS[previewSize];
   const scaleX = fmt.w / CANVAS_SIZE;
-  const textW = textBlockWidth(tb);
   const h = textBlockHeight(tb);
-  // Left edge of the inked text within the wrap box, by alignment.
-  let leftX = tb.x;
-  if (tb.align === 'right')       leftX = tb.x + tb.width - textW;
-  else if (tb.align === 'center') leftX = tb.x + (tb.width - textW) / 2;
+  let leftX, boxW;
+  if (draggingTextWidth) {
+    // While resizing, show the actual wrap boundary (tb.width) so the box and
+    // handle track the cursor 1:1 instead of snapping to the re-wrapped text.
+    leftX = tb.x;
+    boxW  = tb.width;
+  } else {
+    // At rest, hug the actual rendered text extent (widest line).
+    const textW = textBlockWidth(tb);
+    leftX = tb.x;
+    if (tb.align === 'right')       leftX = tb.x + tb.width - textW;
+    else if (tb.align === 'center') leftX = tb.x + (tb.width - textW) / 2;
+    boxW = textW;
+  }
   box.style.display = 'block';
   box.style.left   = (leftX * scaleX * scale) + 'px';
   box.style.top    = (tb.y * scale) + 'px';
-  box.style.width  = (textW * scaleX * scale) + 'px';
+  box.style.width  = (boxW * scaleX * scale) + 'px';
   box.style.height = (h * scale) + 'px';
   // The width handle is a CSS-positioned child at the box's right edge.
 }
@@ -699,8 +707,19 @@ if (textWidthHandle) {
     if (!slides.length || selectedTextIdx === null) return;
     const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
     draggingTextWidth = true;
-    textWidthDragStartX = e.clientX;
-    textWidthDragStartW = tb.width;
+    // Anchor to the *visible* right edge of the box the user grabbed (the
+    // text-extent edge), measured in design px, so the edge stays glued to the
+    // cursor with no initial jump. During the drag the box is drawn from tb.x
+    // with width tb.width, so we store the gap between the cursor and that
+    // visible edge, plus the box's left edge, to reconstruct width absolutely.
+    const fmt = EXPORT_FORMATS[previewSize];
+    const scaleX = fmt.w / CANVAS_SIZE;
+    const boxRect = textWidthHandle.parentElement.getBoundingClientRect();
+    const canvasRect = mainCanvas.getBoundingClientRect();
+    // Visible right edge in design-x:
+    const visibleRightDesign = (boxRect.right - canvasRect.left) / (scale * scaleX);
+    const d = screenToDesign(e.clientX, e.clientY);
+    textWidthGrabOffset = visibleRightDesign - d.x; // cursor-to-edge gap (design px)
     overlay.style.cursor = 'ew-resize';
   });
 }
@@ -884,15 +903,14 @@ window.addEventListener('mousemove', e => {
     updateBgSelectionBox();
     return;
   }
-  // Text-box width resize drag — apply the pointer's horizontal delta to the
-  // width captured at drag start, so it tracks 1:1 regardless of alignment or
-  // where the handle sits on the box.
+  // Text-box width resize drag — absolute positioning: the box's right edge
+  // (tb.x + tb.width) is kept glued to the cursor via the grab offset captured
+  // at mousedown, so it tracks 1:1 with no initial jump.
   if (draggingTextWidth && selectedTextIdx !== null) {
     const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
-    const fmt = EXPORT_FORMATS[previewSize];
-    const scaleX = fmt.w / CANVAS_SIZE;
-    const dDesign = (e.clientX - textWidthDragStartX) / (scale * scaleX);
-    const newW = Math.round(Math.max(40, Math.min(CANVAS_SIZE, textWidthDragStartW + dDesign)));
+    // Absolute: the box's right edge follows the cursor directly.
+    const d = screenToDesign(e.clientX, e.clientY);
+    const newW = Math.max(40, (d.x + textWidthGrabOffset) - tb.x);
     tb.width = newW;
     const wInput = document.getElementById('pos-w');
     if (wInput) wInput.value = newW;
@@ -939,6 +957,16 @@ window.addEventListener('mouseup', () => {
   }
   if (draggingTextWidth) {
     draggingTextWidth = false;
+    // Round to a clean integer now that the drag is over, and re-render so the
+    // selection box snaps back to hugging the text extent.
+    if (selectedTextIdx !== null && slides.length) {
+      const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
+      tb.width = Math.round(tb.width);
+      const wInput = document.getElementById('pos-w');
+      if (wInput) wInput.value = tb.width;
+      syncPosLabels(tb.x, tb.y, tb.width);
+    }
+    renderCurrent();
     pushUndoDebounced();
     scheduleSave();
   }
