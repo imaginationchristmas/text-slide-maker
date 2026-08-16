@@ -1122,8 +1122,14 @@ function refreshSlidePicker() {
 }
 
 function updateBulkDelBtn() {
+  const n = selectedSlides.size;
   const btn = document.getElementById('bulk-del-btn');
-  if (btn) btn.style.display = selectedSlides.size > 0 ? '' : 'none';
+  if (btn) btn.style.display = n > 0 ? '' : 'none';
+  const cnt = document.getElementById('sel-count');
+  if (cnt) {
+    cnt.style.display = n > 0 ? '' : 'none';
+    cnt.textContent = n + ' selected';
+  }
 }
 
 function bulkDeleteSlides() {
