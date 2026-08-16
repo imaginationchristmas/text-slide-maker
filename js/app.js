@@ -1577,10 +1577,12 @@ function applyBgToAll() {
 // ─── COLOR PRESETS ────────────────────────────────────────────────────────────
 
 const BG_COLORS = [
-  '#000000','#111111','#1a1a1a','#2d2d2d',
-  '#ffffff','#f5f5f0','#e8e8e8','#d0d0d0',
-  '#1a1a2e','#0f3460','#1b1b2f','#0d1b2a',
-  '#3a1c1c','#1c3a1c','#2a1a3e','#1a2e1a',
+  // Neutrals: black → greys → off-white → white
+  '#000000','#1a1a1a','#3a3a3a','#6b6b6b',
+  '#9a9a9a','#d0d0d0','#f5f5f0','#ffffff',
+  // Hues: a varied spread across the color wheel
+  '#e63946','#f4a261','#e9c46a','#2a9d8f',
+  '#457b9d','#5d27bf','#a066ff','#ef6aa0',
 ];
 
 const GRAD_PRESETS = [
