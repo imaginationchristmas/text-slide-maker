@@ -255,11 +255,28 @@ function renderSlideToSize(slide, targetW, targetH) {
   const scaleX = targetW / CANVAS_SIZE;
   const scaleY = targetH / CANVAS_SIZE;
 
-  // Background
-  if (slide.bgType === 'image' && slide.bgImage) {
-    // Fill with the slide's solid color first so it shows through transparent/scaled images
-    g.fillStyle = slide.bgColor || '#000000';
+  // Background — the image is an independent layer drawn ON TOP of a backdrop.
+  // bgType selects the backdrop ('solid' | 'gradient'); the image (if present)
+  // always renders above it, so switching solid<->gradient never removes it.
+  if (slide.bgType === 'gradient') {
+    const rad = (slide.gradAngle - 90) * Math.PI / 180;
+    const cx = targetW / 2, cy = targetH / 2;
+    const d = Math.sqrt(targetW * targetW + targetH * targetH) / 2;
+    const grd = g.createLinearGradient(
+      cx - Math.cos(rad) * d, cy - Math.sin(rad) * d,
+      cx + Math.cos(rad) * d, cy + Math.sin(rad) * d
+    );
+    grd.addColorStop(0, slide.gradC1);
+    grd.addColorStop(1, slide.gradC2);
+    g.fillStyle = grd;
     g.fillRect(0, 0, targetW, targetH);
+  } else {
+    // solid backdrop (also the fill behind/around an image)
+    g.fillStyle = slide.bgColor;
+    g.fillRect(0, 0, targetW, targetH);
+  }
+  // Image layer on top, whenever one is uploaded.
+  if (slide.bgImage) {
     const img = bgImageCache.get(slide.bgImage);
     if (img && img.complete && img.naturalWidth) {
       const fit = slide.bgImageFit || 'cover';
@@ -284,21 +301,6 @@ function renderSlideToSize(slide, targetW, targetH) {
       }
       g.drawImage(img, dx, dy, dw, dh);
     }
-  } else if (slide.bgType === 'gradient') {
-    const rad = (slide.gradAngle - 90) * Math.PI / 180;
-    const cx = targetW / 2, cy = targetH / 2;
-    const d = Math.sqrt(targetW * targetW + targetH * targetH) / 2;
-    const grd = g.createLinearGradient(
-      cx - Math.cos(rad) * d, cy - Math.sin(rad) * d,
-      cx + Math.cos(rad) * d, cy + Math.sin(rad) * d
-    );
-    grd.addColorStop(0, slide.gradC1);
-    grd.addColorStop(1, slide.gradC2);
-    g.fillStyle = grd;
-    g.fillRect(0, 0, targetW, targetH);
-  } else {
-    g.fillStyle = slide.bgColor;
-    g.fillRect(0, 0, targetW, targetH);
   }
 
   // Text blocks — X scales with canvas width; Y is absolute (same pixel position across formats)
@@ -520,7 +522,7 @@ function renderCurrent() {
 // Compute the rendered image rect in canvas-pixel space for the current slide.
 // Returns {dx, dy, dw, dh} or null if no bg image.
 function getBgImageRect(slide) {
-  if (!slide || slide.bgType !== 'image' || !slide.bgImage) return null;
+  if (!slide || !slide.bgImage) return null;
   const img = bgImageCache.get(slide.bgImage);
   if (!img || !img.complete || !img.naturalWidth) return null;
   const fmt = EXPORT_FORMATS[previewSize];
@@ -750,7 +752,7 @@ overlay.addEventListener('mousedown', e => {
     dragStartClientY = e.clientY;
     dragPending = true;
     overlay.style.cursor = 'grabbing';
-  } else if (slide.bgType === 'image' && slide.bgImage) {
+  } else if (slide.bgImage) {
     if (!bgSelected) {
       // First click — select the image
       bgSelected = true;
@@ -796,7 +798,7 @@ overlay.addEventListener('dblclick', e => {
       const ta = document.getElementById('text-content');
       if (ta) { ta.focus(); ta.select(); }
     }, 0);
-  } else if (slide.bgType === 'image' && slide.bgImage) {
+  } else if (slide.bgImage) {
     // Double-click on bg image resets pan and zoom to defaults
     pushUndo();
     slide.bgImageX = 0;
@@ -823,7 +825,7 @@ overlay.addEventListener('mousemove', e => {
   if (hitIdx >= 0) {
     // Show grab cursor on selected text, pointer on unselected
     overlay.style.cursor = (hitIdx === selectedTextIdx) ? 'grab' : 'pointer';
-  } else if (slide.bgType === 'image' && slide.bgImage) {
+  } else if (slide.bgImage) {
     overlay.style.cursor = bgSelected ? 'grab' : 'pointer';
   } else {
     overlay.style.cursor = 'default';
@@ -1173,7 +1175,9 @@ function loadSlideToUI() {
   if (!slides.length) return;
   const s = slides[currentSlideIdx];
 
-  bgType = s.bgType || 'solid';
+  // If the slide has an image layer, open on the Image tab so its controls are
+  // visible; otherwise open on the slide's backdrop tab (solid/gradient).
+  bgType = s.bgImage ? 'image' : (s.bgType || 'solid');
   document.getElementById('bg-solid-tab').classList.toggle('active', bgType === 'solid');
   document.getElementById('bg-grad-tab').classList.toggle('active', bgType === 'gradient');
   document.getElementById('bg-image-tab').classList.toggle('active', bgType === 'image');
@@ -1186,7 +1190,7 @@ function loadSlideToUI() {
   document.getElementById('grad-angle').value = s.gradAngle;
   document.getElementById('grad-angle-val').textContent = s.gradAngle + '°';
   // Image bg
-  const hasImg = bgType === 'image' && s.bgImage;
+  const hasImg = !!s.bgImage;
   document.getElementById('bg-image-preview').style.display = hasImg ? '' : 'none';
   if (hasImg) document.getElementById('bg-img-thumb').src = s.bgImage;
   document.getElementById('bg-image-fit').value = s.bgImageFit || 'cover';
@@ -1448,17 +1452,17 @@ function applyFormatToAll() {
 // ─── BACKGROUND ───────────────────────────────────────────────────────────────
 
 function setBgType(type) {
+  // UI-only: switch which background panel is visible. The slide's rendered
+  // bgType is NOT changed here — it only updates when the user actually picks
+  // a color / gradient / image inside the tab (see updateBg, preset handlers,
+  // setBgImage). This keeps the previous background visible while browsing tabs.
   bgType = type;
-  if (!slides.length) return;
-  pushUndo();
-  slides[currentSlideIdx].bgType = type;
   document.getElementById('bg-solid-tab').classList.toggle('active', type === 'solid');
   document.getElementById('bg-grad-tab').classList.toggle('active', type === 'gradient');
   document.getElementById('bg-image-tab').classList.toggle('active', type === 'image');
   document.getElementById('bg-solid-ctrl').style.display = type === 'solid' ? '' : 'none';
   document.getElementById('bg-grad-ctrl').style.display  = type === 'gradient' ? '' : 'none';
   document.getElementById('bg-image-ctrl').style.display = type === 'image' ? '' : 'none';
-  renderCurrent();
 }
 
 function setBgImage(event) {
@@ -1473,7 +1477,7 @@ function setBgImage(event) {
     const img = bgImageCache.get(dataURL);
     const doRender = () => {
       slides[currentSlideIdx].bgImage = dataURL;
-      slides[currentSlideIdx].bgType = 'image';
+      // Keep the current backdrop (solid/gradient); the image is a layer on top.
       slides[currentSlideIdx].bgImageFit = document.getElementById('bg-image-fit').value;
       slides[currentSlideIdx].bgImageX = 0;
       slides[currentSlideIdx].bgImageY = 0;
@@ -1547,6 +1551,10 @@ function updateBg() {
   s.gradC1    = document.getElementById('grad-c1').value;
   s.gradC2    = document.getElementById('grad-c2').value;
   s.gradAngle = parseInt(document.getElementById('grad-angle').value);
+  // Commit the backdrop the user is actively editing (solid or gradient).
+  // Tab switches alone (setBgType) do NOT change bgType, and an uploaded image
+  // is an independent layer that always stays rendered on top.
+  if (bgType === 'solid' || bgType === 'gradient') s.bgType = bgType;
   renderCurrent();
 }
 
@@ -1563,7 +1571,7 @@ function applyBgToAll() {
     slide.gradAngle = s.gradAngle;
     // Only copy image properties when the source slide actually uses an image.
     // If the source is solid/gradient, leave each slide's own image intact.
-    if (s.bgType === 'image') {
+    if (s.bgImage) {
       slide.bgImage      = s.bgImage;
       slide.bgImageFit   = s.bgImageFit;
       slide.bgImageX     = s.bgImageX;
@@ -1616,7 +1624,14 @@ function initPresets() {
     d.title = c;
     d.onclick = () => {
       document.getElementById('bg-color').value = c;
-      if (slides.length) { slides[currentSlideIdx].bgColor = c; renderCurrent(); }
+      if (slides.length) {
+        pushUndo();
+        const s = slides[currentSlideIdx];
+        s.bgColor = c;
+        s.bgType = 'solid'; // backdrop; any uploaded image stays on top
+        renderCurrent();
+        scheduleSave();
+      }
     };
     bgPre.appendChild(d);
   });
@@ -1634,9 +1649,12 @@ function initPresets() {
       document.getElementById('grad-angle').value = gp.a;
       document.getElementById('grad-angle-val').textContent = gp.a + '°';
       if (slides.length) {
+        pushUndo();
         const s = slides[currentSlideIdx];
         s.gradC1 = gp.c1; s.gradC2 = gp.c2; s.gradAngle = gp.a;
+        s.bgType = 'gradient'; // backdrop; any uploaded image stays on top
         renderCurrent();
+        scheduleSave();
       }
     };
     gradPre.appendChild(d);
