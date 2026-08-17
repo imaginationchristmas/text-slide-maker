@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-skin="modern" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -36,7 +36,8 @@
   <button class="tb-btn primary" onclick="showExport()" title="Export slides as PNG images in a ZIP file">↓ Export</button>
   <span id="slide-count">0 slides</span>
   <div class="tb-sep"></div>
-  <button class="tb-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle light / dark mode" style="font-size:15px;padding:0 8px;">☀︎</button>
+  <button class="tb-btn" id="mode-btn" onclick="toggleTheme()" title="Toggle dark / light mode" style="font-size:15px;padding:0 8px;">☀︎</button>
+  <button class="tb-btn" id="theme-btn" onclick="showSkinPicker()" title="Change interface theme" style="font-size:15px;padding:0 8px;">🎨</button>
   <button class="tb-btn" id="help-btn" onclick="showHelp()" title="Help, shortcuts & how to use the app" style="font-size:14px;padding:0 9px;font-weight:700;">?</button>
 </div>
 
@@ -522,6 +523,33 @@ And this becomes slide three</div>
     <div class="help-section">
       <div class="help-heading">Saving & your data</div>
       <p>Your project auto-saves to this browser as you work. Use <b>⬇ Save</b> to download a project file you can back up or move to another computer, and <b>📂 Load</b> to open it again.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Skin / Theme Picker Modal -->
+<div id="skin-modal" onclick="if(event.target===this)closeSkinPicker()">
+  <div id="skin-box">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <h3>Choose a Theme</h3>
+      <button class="tb-btn" onclick="closeSkinPicker()" title="Close" style="padding:0 8px;">✕</button>
+    </div>
+    <p>Pick a look for the interface. This only changes the app's appearance — your slides are unaffected. You can change it anytime with the 🎨 button above, and toggle dark / light with the ☀︎ button.</p>
+    <div class="skin-grid">
+      <button class="skin-card" data-skin="modern" onclick="chooseSkin('modern')">
+        <span class="skin-swatch">
+          <i style="background:#0f0f0f"></i><i style="background:#1c1c1c"></i><i style="background:#4D5DFA"></i><i style="background:#AE4DFA"></i>
+        </span>
+        <span class="skin-name">Modern</span>
+        <span class="skin-desc">Clean dark studio UI. The original look.</span>
+      </button>
+      <button class="skin-card" data-skin="dos" onclick="chooseSkin('dos')">
+        <span class="skin-swatch">
+          <i style="background:#0000a8"></i><i style="background:#000070"></i><i style="background:#00ffff"></i><i style="background:#ffff00"></i>
+        </span>
+        <span class="skin-name">DOS-86</span>
+        <span class="skin-desc">BIOS setup utility. Cyan on navy, monospace.</span>
+      </button>
     </div>
   </div>
 </div>

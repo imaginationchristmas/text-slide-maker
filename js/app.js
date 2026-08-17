@@ -2982,11 +2982,31 @@ document.addEventListener('keydown', e => {
 
 window.addEventListener('resize', updateCanvasScale);
 
-// ─── THEME ────────────────────────────────────────────────────────────────────
+// ─── SKINS (interface themes) ─────────────────────────────────────────────────
+// Two independent axes, both persisted:
+//   skin  (data-skin:  'modern' | 'dos')   → localStorage 'sm-skin'
+//   mode  (data-theme: 'dark' | 'light')   → localStorage 'sm-theme'
+// First visit (no saved skin) triggers the chooser modal after boot.
+
+const SKINS = {
+  modern: { name: 'Modern',  desc: 'Clean studio UI' },
+  dos:    { name: 'DOS-86',  desc: 'Retro terminal / BIOS utility' }
+};
+
+function applySkin(s) {
+  if (!SKINS[s]) s = 'modern';
+  document.documentElement.setAttribute('data-skin', s);
+  localStorage.setItem('sm-skin', s);
+  // Reflect active state in the picker if it's open
+  document.querySelectorAll('.skin-card').forEach(c => {
+    c.classList.toggle('active', c.dataset.skin === s);
+  });
+}
 
 function applyTheme(t) {
+  if (t !== 'light' && t !== 'dark') t = 'dark';
   document.documentElement.setAttribute('data-theme', t);
-  const btn = document.getElementById('theme-btn');
+  const btn = document.getElementById('mode-btn');
   if (btn) btn.textContent = t === 'dark' ? '☀︎' : '☾';
   localStorage.setItem('sm-theme', t);
 }
@@ -2995,10 +3015,27 @@ function toggleTheme() {
   applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
 }
 
+function showSkinPicker() {
+  applySkin(localStorage.getItem('sm-skin') || 'modern'); // sync active highlight
+  document.getElementById('skin-modal').classList.add('show');
+}
+
+function closeSkinPicker() {
+  document.getElementById('skin-modal').classList.remove('show');
+}
+
+function chooseSkin(s) {
+  applySkin(s);
+  closeSkinPicker();
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
 async function init() {
-  // Restore saved theme preference
+  // Restore saved skin (default modern). First visit → flag to show chooser.
+  const savedSkin = localStorage.getItem('sm-skin');
+  const firstVisit = !savedSkin;
+  applySkin(savedSkin || 'modern');
   applyTheme(localStorage.getItem('sm-theme') || 'dark');
 
   // Load fonts first
@@ -3022,6 +3059,7 @@ async function init() {
     renderCurrent();
     updateUndoButtons();
     document.getElementById('loading-screen').style.display = 'none';
+    if (firstVisit) showSkinPicker();
     return;
   }
 
@@ -3048,6 +3086,7 @@ async function init() {
 
   // Hide loading screen
   document.getElementById('loading-screen').style.display = 'none';
+  if (firstVisit) showSkinPicker();
 }
 
 init();
