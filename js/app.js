@@ -154,6 +154,15 @@ function getBgImages(slide) {
 }
 
 // The image layer currently targeted by the fit/offset controls + canvas drag.
+// Max |layer.y| (design units) for a bg image, based on the active canvas
+// height. The image is vertically centered on the canvas, so reaching the
+// top/bottom edge of a taller format (portrait/story) needs a proportionally
+// larger offset. fmt.w is always 1080, so design units == canvas px here.
+function bgImageYLimit() {
+  const fmt = EXPORT_FORMATS[previewSize] || EXPORT_FORMATS.square;
+  return Math.round(fmt.h / 2);
+}
+
 let selectedBgImageIdx = 0;
 function getSelectedBgImage(slide) {
   const arr = getBgImages(slide);
@@ -332,7 +341,11 @@ function renderSlideToSize(slide, targetW, targetH) {
         dw = CANVAS_SIZE * userScale; dh = CANVAS_SIZE * userScale;
       }
       const dx = ((CANVAS_SIZE - dw) / 2 + (layer.x || 0)) * designScale;
-      const dy = ((CANVAS_SIZE - dh) / 2 + (layer.y || 0)) * designScale;
+      // Anchor vertically to the ACTUAL canvas center (targetH/2), not the
+      // 1080 design center. On taller formats (portrait/story) this keeps
+      // layer.y=0 centered and lets ±(targetH/2) reach the top/bottom edges.
+      // designScale is 1 (width is always 1080), so design units == canvas px.
+      const dy = (targetH - dh * designScale) / 2 + (layer.y || 0) * designScale;
       g.drawImage(img, dx, dy, dw * designScale, dh * designScale);
     }
   });
@@ -575,7 +588,8 @@ function getBgImageLayerRect(slide, layer) {
     dw = CANVAS_SIZE * userScale; dh = CANVAS_SIZE * userScale;
   }
   const dx = ((CANVAS_SIZE - dw) / 2 + (layer.x || 0)) * designScale;
-  const dy = ((CANVAS_SIZE - dh) / 2 + (layer.y || 0)) * designScale;
+  // Match renderSlideToSize: anchor vertically to the actual canvas center.
+  const dy = (fmt.h - dh * designScale) / 2 + (layer.y || 0) * designScale;
   return { dx, dy, dw: dw * designScale, dh: dh * designScale };
 }
 
@@ -671,6 +685,13 @@ function setPreviewSize(key) {
   mainCanvas.height = fmt.h;
   // Update Y slider max to match format height
   document.getElementById('pos-y').max = fmt.h;
+  // Update bg-image Y slider range to match format height (design units)
+  const bgY = document.getElementById('bg-img-y');
+  if (bgY) {
+    const lim = bgImageYLimit();
+    bgY.min = -lim;
+    bgY.max = lim;
+  }
   updateCanvasScale();
   renderCurrent();
 }
@@ -948,8 +969,9 @@ window.addEventListener('mousemove', e => {
     const layer = getSelectedBgImage(slide);
     if (!layer) { draggingBgResize = null; return; }
     layer.scale = newScale;
+    const yLim = bgImageYLimit();
     layer.x = Math.round(Math.max(-540, Math.min(540, newOffX)));
-    layer.y = Math.round(Math.max(-540, Math.min(540, newOffY)));
+    layer.y = Math.round(Math.max(-yLim, Math.min(yLim, newOffY)));
 
     document.getElementById('bg-img-scale').value = newScale;
     document.getElementById('bg-img-scale-val').textContent = newScale + '%';
@@ -969,8 +991,9 @@ window.addEventListener('mousemove', e => {
     const designDy = Math.round(dy * (CANVAS_SIZE / fmt.w));
     const layer = getSelectedBgImage(slide);
     if (!layer) { draggingBg = false; return; }
+    const yLim = bgImageYLimit();
     layer.x = Math.max(-540, Math.min(540, bgDragOriginX + designDx));
-    layer.y = Math.max(-540, Math.min(540, bgDragOriginY + designDy));
+    layer.y = Math.max(-yLim, Math.min(yLim, bgDragOriginY + designDy));
     document.getElementById('bg-img-x').value = layer.x;
     document.getElementById('bg-img-y').value = layer.y;
     document.getElementById('bg-img-x-val').textContent = layer.x;
@@ -1721,6 +1744,10 @@ function syncBgImageControls() {
   const listWrap = document.getElementById('bg-image-list-wrap');
   if (listWrap) listWrap.style.display = hasImg ? '' : 'none';
   if (layer) {
+    const yLim = bgImageYLimit();
+    const bgY = document.getElementById('bg-img-y');
+    bgY.min = -yLim;
+    bgY.max = yLim;
     document.getElementById('bg-image-fit').value = layer.fit || 'cover';
     document.getElementById('bg-img-x').value = layer.x || 0;
     document.getElementById('bg-img-y').value = layer.y || 0;
