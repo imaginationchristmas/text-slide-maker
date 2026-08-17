@@ -933,7 +933,7 @@ window.addEventListener('mousemove', e => {
     const newAbsDh = Math.abs(rawDh);
 
     // New scale derived from new width vs base width at scale=100
-    const newScale = Math.round(Math.max(10, Math.min(300, (newAbsDw / bgResizeBaseW) * 100)));
+    const newScale = Math.round(Math.max(10, Math.min(150, (newAbsDw / bgResizeBaseW) * 100)));
 
     // New center → new bgImageX/Y offset in 1080-space
     const newCenterX = newDx + newAbsDw / 2;
@@ -1539,6 +1539,9 @@ function setBgImage(event) {
   pushUndo();
   const slide = slides[currentSlideIdx];
   const arr = getBgImages(slide);
+  // Capture the current topmost layer's settings so newly-added images inherit
+  // the same fit/position/zoom — saves re-sizing each upload to match.
+  const ref = arr.length ? arr[arr.length - 1] : null;
   let pending = files.length;
   files.forEach(file => {
     const reader = new FileReader();
@@ -1547,7 +1550,14 @@ function setBgImage(event) {
       ensureBgImageCached(dataURL);
       const img = bgImageCache.get(dataURL);
       const addLayer = () => {
-        arr.push(makeBgImage(dataURL));
+        const layer = makeBgImage(dataURL);
+        if (ref) {
+          layer.fit = ref.fit;
+          layer.x = ref.x;
+          layer.y = ref.y;
+          layer.scale = ref.scale;
+        }
+        arr.push(layer);
         selectedBgImageIdx = arr.length - 1; // select the newly added image
         if (--pending === 0) {
           bgType = 'image';
