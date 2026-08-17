@@ -92,6 +92,11 @@ let textWidthGrabOffset = 0; // design-px offset from pointer to the box's right
 let draggingBg = false;
 let bgDragStartX = 0, bgDragStartY = 0;
 let bgDragOriginX = 0, bgDragOriginY = 0;
+// Group drag (multi-select move) state. On drag start we snapshot every
+// selected item's position, then apply the shared mouse delta to each.
+let draggingGroup = false;
+let groupDragStartX = 0, groupDragStartY = 0; // client coords at drag start
+let groupDragOrigins = []; // [{ type, idx, x, y }] positions at drag start
 // Background image selection + resize state
 let bgSelected = false;
 let draggingBgResize = null; // 'tl'|'tr'|'bl'|'br' or null
@@ -164,6 +169,64 @@ function bgImageYLimit() {
 }
 
 let selectedBgImageIdx = 0;
+
+// ─── UNIFIED MULTI-SELECT ─────────────────────────────────────────────────────
+// Ordered list of selected canvas items, each { type: 'text'|'image', idx }.
+// The last entry is the "primary" (most recently clicked) item. When exactly
+// one item is selected, the legacy single-item globals (selectedTextIdx /
+// selectedBgImageIdx / bgSelected) are kept in sync so the existing controls
+// panel and single-item logic keep working unchanged. When more than one item
+// is selected, the single-item panels are hidden and drags move the whole group.
+let selectedItems = [];
+
+function itemKey(type, idx) { return type + ':' + idx; }
+
+function isItemSelected(type, idx) {
+  return selectedItems.some(it => it.type === type && it.idx === idx);
+}
+
+function primaryItem() {
+  return selectedItems.length ? selectedItems[selectedItems.length - 1] : null;
+}
+
+// Sync the legacy single-item globals from the current selection. Only a
+// single-item selection maps onto them; multi-select clears them so the
+// single-item panels hide.
+function syncLegacySelection() {
+  if (selectedItems.length === 1) {
+    const it = selectedItems[0];
+    if (it.type === 'text') {
+      selectedTextIdx = it.idx;
+      bgSelected = false;
+    } else {
+      selectedBgImageIdx = it.idx;
+      bgSelected = true;
+      selectedTextIdx = null;
+    }
+  } else {
+    selectedTextIdx = null;
+    bgSelected = false;
+  }
+}
+
+function clearSelection() {
+  selectedItems = [];
+  syncLegacySelection();
+}
+
+function selectSingleItem(type, idx) {
+  selectedItems = [{ type, idx }];
+  syncLegacySelection();
+}
+
+function toggleItemInSelection(type, idx) {
+  const k = itemKey(type, idx);
+  const at = selectedItems.findIndex(it => itemKey(it.type, it.idx) === k);
+  if (at >= 0) selectedItems.splice(at, 1);
+  else selectedItems.push({ type, idx });
+  syncLegacySelection();
+}
+
 function getSelectedBgImage(slide) {
   const arr = getBgImages(slide);
   if (!arr.length) return null;
@@ -620,7 +683,9 @@ function hitTestBgImages(slide, mx, my) {
 // Position the selection box overlay to match the rendered bg image rect.
 function updateBgSelectionBox() {
   const box = document.getElementById('bg-selection-box');
-  if (!slides.length || !bgSelected) { box.style.display = 'none'; return; }
+  // During multi-select the per-item outlines take over the visuals.
+  if (selectedItems.length > 1) { box.style.display = 'none'; updateMultiSelectionBoxes(); return; }
+  if (!slides.length || !bgSelected) { box.style.display = 'none'; updateMultiSelectionBoxes(); return; }
   const slide = slides[currentSlideIdx];
   const rect = getBgImageRect(slide);
   if (!rect) { box.style.display = 'none'; return; }
@@ -640,9 +705,11 @@ function updateBgSelectionBox() {
 function updateTextSelectionBox() {
   const box = document.getElementById('text-selection-box');
   if (!box) return;
+  // During multi-select the per-item outlines take over the visuals.
+  if (selectedItems.length > 1) { box.style.display = 'none'; updateMultiSelectionBoxes(); return; }
   const tb = (slides.length && selectedTextIdx !== null)
     ? slides[currentSlideIdx].textBlocks[selectedTextIdx] : null;
-  if (!tb) { box.style.display = 'none'; return; }
+  if (!tb) { box.style.display = 'none'; updateMultiSelectionBoxes(); return; }
   const fmt = EXPORT_FORMATS[previewSize];
   const scaleX = fmt.w / CANVAS_SIZE;
   const h = textBlockHeight(tb);
@@ -666,6 +733,45 @@ function updateTextSelectionBox() {
   box.style.width  = (boxW * scaleX * scale) + 'px';
   box.style.height = (h * scale) + 'px';
   // The width handle is a CSS-positioned child at the box's right edge.
+}
+
+// Compute a text block's rendered rect in canvas-pixel space (same math as
+// updateTextSelectionBox, minus the resize special-case). Returns null if the
+// block index is invalid.
+function getTextBlockRect(slide, idx) {
+  const tb = slide && slide.textBlocks[idx];
+  if (!tb) return null;
+  const fmt = EXPORT_FORMATS[previewSize];
+  const scaleX = fmt.w / CANVAS_SIZE;
+  const h = textBlockHeight(tb);
+  const textW = textBlockWidth(tb);
+  let leftX = tb.x;
+  if (tb.align === 'right')       leftX = tb.x + tb.width - textW;
+  else if (tb.align === 'center') leftX = tb.x + (tb.width - textW) / 2;
+  return { dx: leftX * scaleX, dy: tb.y, dw: textW * scaleX, dh: h };
+}
+
+// Render one dashed outline per selected item when multi-selecting. With a
+// single selection the legacy single-item boxes handle the visuals instead.
+function updateMultiSelectionBoxes() {
+  const layer = document.getElementById('multi-select-layer');
+  if (!layer) return;
+  layer.innerHTML = '';
+  if (!slides.length || selectedItems.length < 2) return;
+  const slide = slides[currentSlideIdx];
+  selectedItems.forEach(it => {
+    const rect = it.type === 'text'
+      ? getTextBlockRect(slide, it.idx)
+      : getBgImageLayerRect(slide, getBgImages(slide)[it.idx]);
+    if (!rect) return;
+    const div = document.createElement('div');
+    div.className = 'multi-select-box';
+    div.style.left   = (rect.dx * scale) + 'px';
+    div.style.top    = (rect.dy * scale) + 'px';
+    div.style.width  = (rect.dw * scale) + 'px';
+    div.style.height = (rect.dh * scale) + 'px';
+    layer.appendChild(div);
+  });
 }
 
 // ─── PREVIEW SIZE ─────────────────────────────────────────────────────────────
@@ -816,40 +922,56 @@ overlay.addEventListener('mousedown', e => {
   const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
 
   const hit = hitTestTextBlocks(slide, mx, my);
+  const imgHit = hit < 0 ? hitTestBgImages(slide, mx, my) : -1;
 
-  if (hit >= 0) {
-    // Select the block (if not already) and arm a pending drag so the user can
-    // press-and-move in a single motion. The drag only activates once the
-    // pointer travels past DRAG_THRESHOLD_PX, so a plain click still just selects.
-    if (selectedTextIdx !== hit) {
-      bgSelected = false;
-      selectedTextIdx = hit;
-      selectTextBlock(hit);
+  // Resolve what was clicked, if anything.
+  const hitType = hit >= 0 ? 'text' : (imgHit >= 0 ? 'image' : null);
+  const hitIdx  = hit >= 0 ? hit : imgHit;
+
+  // Shift+click toggles the clicked item in the multi-selection (no drag).
+  if (e.shiftKey) {
+    if (hitType) {
+      toggleItemInSelection(hitType, hitIdx);
+      refreshTextPanel();
+      refreshBgImageList();
+      syncBgImageControls();
       updateBgSelectionBox();
+      updateTextSelectionBox();
     }
-    const tb = slide.textBlocks[hit];
-    dragOffX = mx - tb.x;
-    dragOffY = my - tb.y;
-    dragStartClientX = e.clientX;
-    dragStartClientY = e.clientY;
-    dragPending = true;
-    overlay.style.cursor = 'grabbing';
-  } else {
-    const imgHit = hitTestBgImages(slide, mx, my);
-    if (imgHit >= 0) {
-      if (!bgSelected || selectedBgImageIdx !== imgHit) {
-        // First click — select the clicked image layer
-        bgSelected = true;
-        selectedBgImageIdx = imgHit;
-        selectedTextIdx = null;
-        refreshTextPanel();
-        refreshBgImageList();
-        syncBgImageControls();
-        updateBgSelectionBox();
-        updateTextSelectionBox();
-        overlay.style.cursor = 'grab';
-      } else {
-        // Already selected — start pan drag on the selected layer
+    return;
+  }
+
+  if (hitType === 'text') {
+    const alreadySelected = isItemSelected('text', hit);
+    // selectTextBlock() routes through selectSingleItem() and also refreshes
+    // the text list/panel so the editor appears on click.
+    if (!alreadySelected) selectTextBlock(hit);
+    // If this click is part of a multi-selection, arm a GROUP drag; otherwise
+    // fall through to the legacy single-block pending drag.
+    if (selectedItems.length > 1) {
+      startGroupDrag(e.clientX, e.clientY);
+      overlay.style.cursor = 'grabbing';
+    } else {
+      const tb = slide.textBlocks[hit];
+      dragOffX = mx - tb.x;
+      dragOffY = my - tb.y;
+      dragStartClientX = e.clientX;
+      dragStartClientY = e.clientY;
+      dragPending = true;
+      overlay.style.cursor = 'grabbing';
+    }
+    updateBgSelectionBox();
+    updateTextSelectionBox();
+  } else if (hitType === 'image') {
+    const alreadySelected = isItemSelected('image', imgHit);
+    if (!alreadySelected) selectSingleItem('image', imgHit);
+    if (selectedItems.length > 1) {
+      startGroupDrag(e.clientX, e.clientY);
+      overlay.style.cursor = 'grabbing';
+    } else {
+      // Single image selected — preserve the original two-step behavior:
+      // first click selects, second click (on the already-selected image) pans.
+      if (bgSelected && selectedBgImageIdx === imgHit) {
         const layer = getSelectedBgImage(slide);
         draggingBg = true;
         bgDragStartX = e.clientX;
@@ -857,18 +979,40 @@ overlay.addEventListener('mousedown', e => {
         bgDragOriginX = layer.x || 0;
         bgDragOriginY = layer.y || 0;
         overlay.style.cursor = 'grabbing';
+      } else {
+        overlay.style.cursor = 'grab';
       }
-    } else {
-      // Click on empty area — deselect everything
-      bgSelected = false;
-      selectedTextIdx = null;
-      refreshTextPanel();
-      overlay.style.cursor = 'default';
-      updateBgSelectionBox();
-      updateTextSelectionBox();
     }
+    refreshTextPanel();
+    refreshBgImageList();
+    syncBgImageControls();
+    updateBgSelectionBox();
+    updateTextSelectionBox();
+  } else {
+    // Click on empty area — deselect everything
+    clearSelection();
+    refreshTextPanel();
+    overlay.style.cursor = 'default';
+    updateBgSelectionBox();
+    updateTextSelectionBox();
   }
 });
+
+// Snapshot the positions of all selected items and arm a group drag.
+function startGroupDrag(clientX, clientY) {
+  const slide = slides[currentSlideIdx];
+  groupDragOrigins = selectedItems.map(it => {
+    if (it.type === 'text') {
+      const tb = slide.textBlocks[it.idx];
+      return { type: 'text', idx: it.idx, x: tb ? tb.x : 0, y: tb ? tb.y : 0 };
+    }
+    const layer = getBgImages(slide)[it.idx];
+    return { type: 'image', idx: it.idx, x: layer ? (layer.x || 0) : 0, y: layer ? (layer.y || 0) : 0 };
+  });
+  groupDragStartX = clientX;
+  groupDragStartY = clientY;
+  draggingGroup = true;
+}
 
 overlay.addEventListener('dblclick', e => {
   if (!slides.length) return;
@@ -880,7 +1024,6 @@ overlay.addEventListener('dblclick', e => {
   const hit = hitTestTextBlocks(slide, mx, my);
 
   if (hit >= 0) {
-    selectedTextIdx = hit;
     selectTextBlock(hit);
     // Use setTimeout so the panel is fully visible before we focus
     setTimeout(() => {
@@ -891,8 +1034,7 @@ overlay.addEventListener('dblclick', e => {
     const imgHit = hitTestBgImages(slide, mx, my);
     if (imgHit >= 0) {
       // Double-click on a bg image resets that layer's pan and zoom to defaults
-      selectedBgImageIdx = imgHit;
-      bgSelected = true;
+      selectSingleItem('image', imgHit);
       const layer = getSelectedBgImage(slide);
       pushUndo();
       layer.x = 0;
@@ -908,18 +1050,21 @@ overlay.addEventListener('dblclick', e => {
 
 // Update cursor on hover
 overlay.addEventListener('mousemove', e => {
-  if (dragging || draggingBg || draggingBgResize || draggingTextWidth) return;
+  if (dragging || draggingBg || draggingBgResize || draggingTextWidth || draggingGroup) return;
   if (!slides.length) return;
   const slide = slides[currentSlideIdx];
   const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
   const hitIdx = hitTestTextBlocks(slide, mx, my);
   if (hitIdx >= 0) {
     // Show grab cursor on selected text, pointer on unselected
-    overlay.style.cursor = (hitIdx === selectedTextIdx) ? 'grab' : 'pointer';
-  } else if (hitTestBgImages(slide, mx, my) >= 0) {
-    overlay.style.cursor = bgSelected ? 'grab' : 'pointer';
+    overlay.style.cursor = isItemSelected('text', hitIdx) ? 'grab' : 'pointer';
   } else {
-    overlay.style.cursor = 'default';
+    const imgHit = hitTestBgImages(slide, mx, my);
+    if (imgHit >= 0) {
+      overlay.style.cursor = isItemSelected('image', imgHit) ? 'grab' : 'pointer';
+    } else {
+      overlay.style.cursor = 'default';
+    }
   }
 });
 
@@ -1026,6 +1171,33 @@ window.addEventListener('mousemove', e => {
       return;
     }
   }
+  // Group drag — move every selected item by the shared mouse delta.
+  if (draggingGroup) {
+    const slide = slides[currentSlideIdx];
+    const fmt = EXPORT_FORMATS[previewSize];
+    const dx = (e.clientX - groupDragStartX) / scale;
+    const dy = (e.clientY - groupDragStartY) / scale;
+    const designDx = dx * (CANVAS_SIZE / fmt.w);
+    const designDy = dy * (CANVAS_SIZE / fmt.w);
+    const yLim = bgImageYLimit();
+    groupDragOrigins.forEach(o => {
+      if (o.type === 'text') {
+        const tb = slide.textBlocks[o.idx];
+        if (!tb) return;
+        tb.x = Math.round(o.x + designDx);
+        tb.y = Math.round(o.y + designDy);
+      } else {
+        const layer = getBgImages(slide)[o.idx];
+        if (!layer) return;
+        layer.x = Math.round(Math.max(-540, Math.min(540, o.x + designDx)));
+        layer.y = Math.round(Math.max(-yLim, Math.min(yLim, o.y + designDy)));
+      }
+    });
+    renderCurrent();
+    updateBgSelectionBox();
+    updateTextSelectionBox();
+    return;
+  }
   if (!dragging || selectedTextIdx === null) return;
   const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
   const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
@@ -1054,6 +1226,12 @@ window.addEventListener('mouseup', () => {
     pushUndoDebounced();
     scheduleSave();
   }
+  if (draggingGroup) {
+    draggingGroup = false;
+    groupDragOrigins = [];
+    pushUndoDebounced();
+    scheduleSave();
+  }
   if (draggingTextWidth) {
     draggingTextWidth = false;
     // Round to a clean integer now that the drag is over, and re-render so the
@@ -1071,7 +1249,7 @@ window.addEventListener('mouseup', () => {
   }
   dragging = false;
   dragPending = false;
-  if (!draggingBg && !draggingBgResize && !draggingTextWidth) overlay.style.cursor = 'default';
+  if (!draggingBg && !draggingBgResize && !draggingTextWidth && !draggingGroup) overlay.style.cursor = 'default';
 });
 
 // ─── SLIDES MANAGEMENT ────────────────────────────────────────────────────────
@@ -1081,7 +1259,7 @@ function addSlide(copyFrom) {
   const s = copyFrom ? JSON.parse(JSON.stringify(copyFrom)) : makeSlide();
   slides.push(s);
   currentSlideIdx = slides.length - 1;
-  selectedTextIdx = null;
+  clearSelection();
   refreshSlidePicker();
   loadSlideToUI();
   renderCurrent();
@@ -1097,7 +1275,7 @@ function deleteSlide(i) {
   pushUndo();
   slides.splice(i, 1);
   currentSlideIdx = Math.min(currentSlideIdx, slides.length - 1);
-  selectedTextIdx = null;
+  clearSelection();
   refreshSlidePicker();
   loadSlideToUI();
   renderCurrent();
@@ -1105,10 +1283,10 @@ function deleteSlide(i) {
 
 function selectSlide(i) {
   currentSlideIdx = i;
-  bgSelected = false;
   // Auto-select first text block if the slide has any, so the right panel stays visible
   const blocks = slides[i] && slides[i].textBlocks;
-  selectedTextIdx = (blocks && blocks.length > 0) ? 0 : null;
+  if (blocks && blocks.length > 0) selectSingleItem('text', 0);
+  else clearSelection();
   refreshSlidePicker();
   loadSlideToUI();
   renderCurrent();
@@ -1327,25 +1505,24 @@ function addTextBlock() {
     tb.y = src.y + Math.round(src.fontSize * src.lineHeight) + 20;
   }
   slides[currentSlideIdx].textBlocks.push(tb);
-  selectedTextIdx = slides[currentSlideIdx].textBlocks.length - 1;
-  refreshTextList();
-  selectTextBlock(selectedTextIdx);
+  selectTextBlock(slides[currentSlideIdx].textBlocks.length - 1);
   renderCurrent();
 }
 
 function deleteTextBlock(i) {
   pushUndo();
   slides[currentSlideIdx].textBlocks.splice(i, 1);
-  if (selectedTextIdx >= slides[currentSlideIdx].textBlocks.length)
-    selectedTextIdx = slides[currentSlideIdx].textBlocks.length - 1;
-  if (slides[currentSlideIdx].textBlocks.length === 0) selectedTextIdx = null;
+  // Indices shifted — drop the multi-selection and re-select a single block.
+  const blocks = slides[currentSlideIdx].textBlocks;
+  if (!blocks.length) clearSelection();
+  else selectSingleItem('text', Math.min(i, blocks.length - 1));
   refreshTextList();
   refreshTextPanel();
   renderCurrent();
 }
 
 function selectTextBlock(i) {
-  selectedTextIdx = i;
+  selectSingleItem('text', i);
   refreshTextList();
   refreshTextPanel();
   updateTextSelectionBox();
@@ -1585,11 +1762,9 @@ function setBgImage(event) {
           layer.scale = ref.scale;
         }
         arr.push(layer);
-        selectedBgImageIdx = arr.length - 1; // select the newly added image
         if (--pending === 0) {
           bgType = 'image';
-          bgSelected = true;
-          selectedTextIdx = null;
+          selectSingleItem('image', arr.length - 1); // select the newly added image
           refreshBgImageList();
           syncBgImageControls();
           refreshTextPanel();
@@ -1613,8 +1788,9 @@ function removeBgImage(idx) {
   if (idx < 0 || idx >= arr.length) return;
   pushUndo();
   arr.splice(idx, 1);
-  if (selectedBgImageIdx >= arr.length) selectedBgImageIdx = arr.length - 1;
-  if (!arr.length) bgSelected = false;
+  // Indices shifted — drop the multi-selection and re-select a single image.
+  if (!arr.length) clearSelection();
+  else selectSingleItem('image', Math.min(idx, arr.length - 1));
   refreshBgImageList();
   syncBgImageControls();
   renderCurrent();
@@ -1633,8 +1809,10 @@ function moveBgImage(idx, dir) {
   const tmp = arr[idx];
   arr[idx] = arr[to];
   arr[to] = tmp;
-  // Keep the same layer selected after the swap.
-  if (selectedBgImageIdx === idx) selectedBgImageIdx = to;
+  // Keep the same layer selected after the swap (single-select only; a
+  // multi-selection's indices are now ambiguous, so collapse to the moved one).
+  if (selectedItems.length > 1) selectSingleItem('image', to);
+  else if (selectedBgImageIdx === idx) selectedBgImageIdx = to;
   else if (selectedBgImageIdx === to) selectedBgImageIdx = idx;
   refreshBgImageList();
   syncBgImageControls();
@@ -1647,9 +1825,7 @@ function selectBgImage(idx) {
   if (!slides.length) return;
   const arr = getBgImages(slides[currentSlideIdx]);
   if (idx < 0 || idx >= arr.length) return;
-  selectedBgImageIdx = idx;
-  bgSelected = true;
-  selectedTextIdx = null;
+  selectSingleItem('image', idx);
   refreshBgImageList();
   syncBgImageControls();
   refreshTextPanel();
@@ -1739,8 +1915,11 @@ function syncBgImageControls() {
   const arr = getBgImages(slide);
   const layer = getSelectedBgImage(slide);
   const hasImg = arr.length > 0;
+  // Hide the single-image offset/fit controls while multi-selecting — those
+  // edits only make sense for one image at a time.
+  const singleImg = selectedItems.length <= 1;
   const offsetRows = document.getElementById('bg-image-offset-rows');
-  if (offsetRows) offsetRows.style.display = hasImg ? '' : 'none';
+  if (offsetRows) offsetRows.style.display = (hasImg && singleImg) ? '' : 'none';
   const listWrap = document.getElementById('bg-image-list-wrap');
   if (listWrap) listWrap.style.display = hasImg ? '' : 'none';
   if (layer) {
@@ -1941,7 +2120,7 @@ function restoreSnapshot(json) {
   const state = JSON.parse(json);
   slides = state.slides;
   currentSlideIdx = Math.min(state.currentSlideIdx, slides.length - 1);
-  selectedTextIdx = null;
+  clearSelection();
   warmBgImageCache(slides);
   refreshSlidePicker();
   loadSlideToUI();
@@ -2013,7 +2192,7 @@ function importProject(event) {
       pushUndo();
       slides = state.slides;
       currentSlideIdx = Math.min(state.currentSlideIdx || 0, slides.length - 1);
-      selectedTextIdx = null;
+      clearSelection();
       refreshSlidePicker();
       loadSlideToUI();
       renderCurrent();
@@ -2932,7 +3111,7 @@ function doBulkImport() {
   });
 
   currentSlideIdx = append ? slides.length - parts.length : 0;
-  selectedTextIdx = null;
+  clearSelection();
   refreshSlidePicker();
   loadSlideToUI();
   renderCurrent();
