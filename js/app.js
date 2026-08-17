@@ -121,13 +121,45 @@ function makeSlide() {
     gradC1: '#1a1a2e',
     gradC2: '#4a0072',
     gradAngle: 135,
-    bgImage: null,       // base64 dataURL
-    bgImageFit: 'cover',
-    bgImageX: 0,         // pixel offset from center (1080-space)
-    bgImageY: 0,
-    bgImageScale: 100,   // percent, 10–300
+    // Multiple background images, drawn in order (index 0 = bottom layer).
+    // Each: { url, fit, x, y, scale }
+    bgImages: [],
     textBlocks: []
   };
+}
+
+// Factory for one background image layer.
+function makeBgImage(url) {
+  return { url: url, fit: 'cover', x: 0, y: 0, scale: 100 };
+}
+
+// Normalize a slide's images into the bgImages[] array, migrating the legacy
+// single-image fields (bgImage/bgImageFit/bgImageX/bgImageY/bgImageScale) on
+// the fly so old saved projects keep working.
+function getBgImages(slide) {
+  if (!slide) return [];
+  if (!Array.isArray(slide.bgImages)) {
+    slide.bgImages = [];
+    if (slide.bgImage) {
+      slide.bgImages.push({
+        url: slide.bgImage,
+        fit: slide.bgImageFit || 'cover',
+        x: slide.bgImageX || 0,
+        y: slide.bgImageY || 0,
+        scale: slide.bgImageScale != null ? slide.bgImageScale : 100
+      });
+    }
+  }
+  return slide.bgImages;
+}
+
+// The image layer currently targeted by the fit/offset controls + canvas drag.
+let selectedBgImageIdx = 0;
+function getSelectedBgImage(slide) {
+  const arr = getBgImages(slide);
+  if (!arr.length) return null;
+  if (selectedBgImageIdx < 0 || selectedBgImageIdx >= arr.length) selectedBgImageIdx = arr.length - 1;
+  return arr[selectedBgImageIdx];
 }
 
 // Cache of loaded Image elements keyed by dataURL (for sync rendering)
@@ -275,17 +307,19 @@ function renderSlideToSize(slide, targetW, targetH) {
     g.fillStyle = slide.bgColor;
     g.fillRect(0, 0, targetW, targetH);
   }
-  // Image layer on top, whenever one is uploaded.
-  if (slide.bgImage) {
-    const img = bgImageCache.get(slide.bgImage);
+  // Image layers on top, drawn in order (index 0 = bottom). Multiple images
+  // can be stacked on one slide.
+  const bgImages = getBgImages(slide);
+  bgImages.forEach(layer => {
+    const img = bgImageCache.get(layer.url);
     if (img && img.complete && img.naturalWidth) {
-      const fit = slide.bgImageFit || 'cover';
+      const fit = layer.fit || 'cover';
       const iw = img.naturalWidth, ih = img.naturalHeight;
       let dx = 0, dy = 0, dw = targetW, dh = targetH;
       // Scale offsets from 1080-space to targetW-space
-      const offX = (slide.bgImageX || 0) * (targetW / CANVAS_SIZE);
-      const offY = (slide.bgImageY || 0) * (targetH / CANVAS_SIZE);
-      const userScale = (slide.bgImageScale != null ? slide.bgImageScale : 100) / 100;
+      const offX = (layer.x || 0) * (targetW / CANVAS_SIZE);
+      const offY = (layer.y || 0) * (targetH / CANVAS_SIZE);
+      const userScale = (layer.scale != null ? layer.scale : 100) / 100;
       if (fit === 'cover') {
         const scale = Math.max(targetW / iw, targetH / ih) * userScale;
         dw = iw * scale; dh = ih * scale;
@@ -301,7 +335,7 @@ function renderSlideToSize(slide, targetW, targetH) {
       }
       g.drawImage(img, dx, dy, dw, dh);
     }
-  }
+  });
 
   // Text blocks — X scales with canvas width; Y is absolute (same pixel position across formats)
   slide.textBlocks.forEach(tb => {
@@ -519,18 +553,18 @@ function renderCurrent() {
   updateTextSelectionBox();
 }
 
-// Compute the rendered image rect in canvas-pixel space for the current slide.
-// Returns {dx, dy, dw, dh} or null if no bg image.
-function getBgImageRect(slide) {
-  if (!slide || !slide.bgImage) return null;
-  const img = bgImageCache.get(slide.bgImage);
+// Compute the rendered rect (canvas-pixel space) for one image layer.
+// `layer` is one entry from slide.bgImages. Returns {dx, dy, dw, dh} or null.
+function getBgImageLayerRect(slide, layer) {
+  if (!slide || !layer) return null;
+  const img = bgImageCache.get(layer.url);
   if (!img || !img.complete || !img.naturalWidth) return null;
   const fmt = EXPORT_FORMATS[previewSize];
   const iw = img.naturalWidth, ih = img.naturalHeight;
-  const fit = slide.bgImageFit || 'cover';
-  const userScale = (slide.bgImageScale != null ? slide.bgImageScale : 100) / 100;
-  const offX = (slide.bgImageX || 0) * (fmt.w / 1080);
-  const offY = (slide.bgImageY || 0) * (fmt.h / 1080);
+  const fit = layer.fit || 'cover';
+  const userScale = (layer.scale != null ? layer.scale : 100) / 100;
+  const offX = (layer.x || 0) * (fmt.w / 1080);
+  const offY = (layer.y || 0) * (fmt.h / 1080);
   let dw, dh;
   if (fit === 'cover') {
     const s = Math.max(fmt.w / iw, fmt.h / ih) * userScale;
@@ -544,6 +578,26 @@ function getBgImageRect(slide) {
   const dx = (fmt.w - dw) / 2 + offX;
   const dy = (fmt.h - dh) / 2 + offY;
   return { dx, dy, dw, dh };
+}
+
+// Rect for the currently-selected image layer (drives the selection box).
+function getBgImageRect(slide) {
+  return getBgImageLayerRect(slide, getSelectedBgImage(slide));
+}
+
+// Hit-test image layers at a design-space point, topmost (last drawn) first.
+// Returns the layer index, or -1 if none hit.
+function hitTestBgImages(slide, mx, my) {
+  const arr = getBgImages(slide);
+  const fmt = EXPORT_FORMATS[previewSize];
+  // design → canvas-pixel
+  const px = mx * (fmt.w / CANVAS_SIZE);
+  const py = my * (fmt.h / CANVAS_SIZE);
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const r = getBgImageLayerRect(slide, arr[i]);
+    if (r && px >= r.dx && px <= r.dx + r.dw && py >= r.dy && py <= r.dy + r.dh) return i;
+  }
+  return -1;
 }
 
 // Position the selection box overlay to match the rendered bg image rect.
@@ -682,11 +736,14 @@ document.querySelectorAll('.bg-corner-handle').forEach(handle => {
     bgResizeAnchorX = corner === 'tl' || corner === 'bl' ? dx + dw : dx;
     bgResizeAnchorY = corner === 'tl' || corner === 'tr' ? dy + dh : dy;
     bgResizeStartRect = { dx, dy, dw, dh };
-    // Compute base dimensions (what scale=100 produces)
-    const img = bgImageCache.get(slide.bgImage);
+    // Compute base dimensions (what scale=100 produces) for the selected layer
+    const layer = getSelectedBgImage(slide);
+    if (!layer) return;
+    const img = bgImageCache.get(layer.url);
+    if (!img) return;
     const fmt = EXPORT_FORMATS[previewSize];
     const iw = img.naturalWidth, ih = img.naturalHeight;
-    const fit = slide.bgImageFit || 'cover';
+    const fit = layer.fit || 'cover';
     if (fit === 'cover') {
       const s = Math.max(fmt.w / iw, fmt.h / ih);
       bgResizeBaseW = iw * s; bgResizeBaseH = ih * s;
@@ -752,32 +809,39 @@ overlay.addEventListener('mousedown', e => {
     dragStartClientY = e.clientY;
     dragPending = true;
     overlay.style.cursor = 'grabbing';
-  } else if (slide.bgImage) {
-    if (!bgSelected) {
-      // First click — select the image
-      bgSelected = true;
+  } else {
+    const imgHit = hitTestBgImages(slide, mx, my);
+    if (imgHit >= 0) {
+      if (!bgSelected || selectedBgImageIdx !== imgHit) {
+        // First click — select the clicked image layer
+        bgSelected = true;
+        selectedBgImageIdx = imgHit;
+        selectedTextIdx = null;
+        refreshTextPanel();
+        refreshBgImageList();
+        syncBgImageControls();
+        updateBgSelectionBox();
+        updateTextSelectionBox();
+        overlay.style.cursor = 'grab';
+      } else {
+        // Already selected — start pan drag on the selected layer
+        const layer = getSelectedBgImage(slide);
+        draggingBg = true;
+        bgDragStartX = e.clientX;
+        bgDragStartY = e.clientY;
+        bgDragOriginX = layer.x || 0;
+        bgDragOriginY = layer.y || 0;
+        overlay.style.cursor = 'grabbing';
+      }
+    } else {
+      // Click on empty area — deselect everything
+      bgSelected = false;
       selectedTextIdx = null;
       refreshTextPanel();
+      overlay.style.cursor = 'default';
       updateBgSelectionBox();
       updateTextSelectionBox();
-      overlay.style.cursor = 'grab';
-    } else {
-      // Already selected — start pan drag
-      draggingBg = true;
-      bgDragStartX = e.clientX;
-      bgDragStartY = e.clientY;
-      bgDragOriginX = slide.bgImageX || 0;
-      bgDragOriginY = slide.bgImageY || 0;
-      overlay.style.cursor = 'grabbing';
     }
-  } else {
-    // Click on empty area — deselect everything
-    bgSelected = false;
-    selectedTextIdx = null;
-    refreshTextPanel();
-    overlay.style.cursor = 'default';
-    updateBgSelectionBox();
-    updateTextSelectionBox();
   }
 });
 
@@ -798,20 +862,22 @@ overlay.addEventListener('dblclick', e => {
       const ta = document.getElementById('text-content');
       if (ta) { ta.focus(); ta.select(); }
     }, 0);
-  } else if (slide.bgImage) {
-    // Double-click on bg image resets pan and zoom to defaults
-    pushUndo();
-    slide.bgImageX = 0;
-    slide.bgImageY = 0;
-    slide.bgImageScale = 100;
-    document.getElementById('bg-img-x').value = 0;
-    document.getElementById('bg-img-y').value = 0;
-    document.getElementById('bg-img-x-val').textContent = '0';
-    document.getElementById('bg-img-y-val').textContent = '0';
-    document.getElementById('bg-img-scale').value = 100;
-    document.getElementById('bg-img-scale-val').textContent = '100%';
-    renderCurrent();
-    scheduleSave();
+  } else {
+    const imgHit = hitTestBgImages(slide, mx, my);
+    if (imgHit >= 0) {
+      // Double-click on a bg image resets that layer's pan and zoom to defaults
+      selectedBgImageIdx = imgHit;
+      bgSelected = true;
+      const layer = getSelectedBgImage(slide);
+      pushUndo();
+      layer.x = 0;
+      layer.y = 0;
+      layer.scale = 100;
+      refreshBgImageList();
+      syncBgImageControls();
+      renderCurrent();
+      scheduleSave();
+    }
   }
 });
 
@@ -825,7 +891,7 @@ overlay.addEventListener('mousemove', e => {
   if (hitIdx >= 0) {
     // Show grab cursor on selected text, pointer on unselected
     overlay.style.cursor = (hitIdx === selectedTextIdx) ? 'grab' : 'pointer';
-  } else if (slide.bgImage) {
+  } else if (hitTestBgImages(slide, mx, my) >= 0) {
     overlay.style.cursor = bgSelected ? 'grab' : 'pointer';
   } else {
     overlay.style.cursor = 'default';
@@ -875,16 +941,18 @@ window.addEventListener('mousemove', e => {
     const newOffX = (newCenterX - fmt.w / 2) * (1080 / fmt.w);
     const newOffY = (newCenterY - fmt.h / 2) * (1080 / fmt.h);
 
-    slide.bgImageScale = newScale;
-    slide.bgImageX = Math.round(Math.max(-540, Math.min(540, newOffX)));
-    slide.bgImageY = Math.round(Math.max(-540, Math.min(540, newOffY)));
+    const layer = getSelectedBgImage(slide);
+    if (!layer) { draggingBgResize = null; return; }
+    layer.scale = newScale;
+    layer.x = Math.round(Math.max(-540, Math.min(540, newOffX)));
+    layer.y = Math.round(Math.max(-540, Math.min(540, newOffY)));
 
     document.getElementById('bg-img-scale').value = newScale;
     document.getElementById('bg-img-scale-val').textContent = newScale + '%';
-    document.getElementById('bg-img-x').value = slide.bgImageX;
-    document.getElementById('bg-img-y').value = slide.bgImageY;
-    document.getElementById('bg-img-x-val').textContent = slide.bgImageX;
-    document.getElementById('bg-img-y-val').textContent = slide.bgImageY;
+    document.getElementById('bg-img-x').value = layer.x;
+    document.getElementById('bg-img-y').value = layer.y;
+    document.getElementById('bg-img-x-val').textContent = layer.x;
+    document.getElementById('bg-img-y-val').textContent = layer.y;
     renderCurrent();
     return;
   }
@@ -895,12 +963,14 @@ window.addEventListener('mousemove', e => {
     const fmt = EXPORT_FORMATS[previewSize];
     const designDx = Math.round(dx * (CANVAS_SIZE / fmt.w));
     const designDy = Math.round(dy * (CANVAS_SIZE / fmt.h));
-    slide.bgImageX = Math.max(-540, Math.min(540, bgDragOriginX + designDx));
-    slide.bgImageY = Math.max(-540, Math.min(540, bgDragOriginY + designDy));
-    document.getElementById('bg-img-x').value = slide.bgImageX;
-    document.getElementById('bg-img-y').value = slide.bgImageY;
-    document.getElementById('bg-img-x-val').textContent = slide.bgImageX;
-    document.getElementById('bg-img-y-val').textContent = slide.bgImageY;
+    const layer = getSelectedBgImage(slide);
+    if (!layer) { draggingBg = false; return; }
+    layer.x = Math.max(-540, Math.min(540, bgDragOriginX + designDx));
+    layer.y = Math.max(-540, Math.min(540, bgDragOriginY + designDy));
+    document.getElementById('bg-img-x').value = layer.x;
+    document.getElementById('bg-img-y').value = layer.y;
+    document.getElementById('bg-img-x-val').textContent = layer.x;
+    document.getElementById('bg-img-y-val').textContent = layer.y;
     renderCurrent();
     updateBgSelectionBox();
     return;
@@ -1181,9 +1251,11 @@ function loadSlideToUI() {
   if (!slides.length) return;
   const s = slides[currentSlideIdx];
 
-  // If the slide has an image layer, open on the Image tab so its controls are
+  // If the slide has image layers, open on the Image tab so its controls are
   // visible; otherwise open on the slide's backdrop tab (solid/gradient).
-  bgType = s.bgImage ? 'image' : (s.bgType || 'solid');
+  const imgArr = getBgImages(s);
+  if (selectedBgImageIdx >= imgArr.length) selectedBgImageIdx = Math.max(0, imgArr.length - 1);
+  bgType = imgArr.length ? 'image' : (s.bgType || 'solid');
   document.getElementById('bg-solid-tab').classList.toggle('active', bgType === 'solid');
   document.getElementById('bg-grad-tab').classList.toggle('active', bgType === 'gradient');
   document.getElementById('bg-image-tab').classList.toggle('active', bgType === 'image');
@@ -1195,20 +1267,9 @@ function loadSlideToUI() {
   document.getElementById('grad-c2').value    = s.gradC2;
   document.getElementById('grad-angle').value = s.gradAngle;
   document.getElementById('grad-angle-val').textContent = s.gradAngle + '°';
-  // Image bg
-  const hasImg = !!s.bgImage;
-  document.getElementById('bg-image-preview').style.display = hasImg ? '' : 'none';
-  if (hasImg) document.getElementById('bg-img-thumb').src = s.bgImage;
-  document.getElementById('bg-image-fit').value = s.bgImageFit || 'cover';
-  document.getElementById('bg-image-offset-rows').style.display = hasImg ? '' : 'none';
-  document.getElementById('bg-img-x').value = s.bgImageX || 0;
-  document.getElementById('bg-img-y').value = s.bgImageY || 0;
-  document.getElementById('bg-img-x-val').textContent = s.bgImageX || 0;
-  document.getElementById('bg-img-y-val').textContent = s.bgImageY || 0;
-  const sc = s.bgImageScale != null ? s.bgImageScale : 100;
-  document.getElementById('bg-img-scale').value = sc;
-  document.getElementById('bg-img-scale-val').textContent = sc + '%';
-  document.getElementById('bg-img-bgcolor').value = s.bgColor || '#1a1a2e';
+  // Image layers
+  refreshBgImageList();
+  syncBgImageControls();
 
   refreshTextList();
   refreshTextPanel();
@@ -1471,74 +1532,115 @@ function setBgType(type) {
   document.getElementById('bg-image-ctrl').style.display = type === 'image' ? '' : 'none';
 }
 
+// Upload one or more images — each is APPENDED as a new layer (never replaces).
 function setBgImage(event) {
-  const file = event.target.files[0];
-  if (!file || !slides.length) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    pushUndo();
-    const dataURL = e.target.result;
-    ensureBgImageCached(dataURL);
-    // Wait for image to load before rendering
-    const img = bgImageCache.get(dataURL);
-    const doRender = () => {
-      slides[currentSlideIdx].bgImage = dataURL;
-      // Keep the current backdrop (solid/gradient); the image is a layer on top.
-      slides[currentSlideIdx].bgImageFit = document.getElementById('bg-image-fit').value;
-      slides[currentSlideIdx].bgImageX = 0;
-      slides[currentSlideIdx].bgImageY = 0;
-      slides[currentSlideIdx].bgImageScale = 100;
-      bgType = 'image';
-      document.getElementById('bg-image-preview').style.display = '';
-      document.getElementById('bg-img-thumb').src = dataURL;
-      document.getElementById('bg-img-x').value = 0;
-      document.getElementById('bg-img-y').value = 0;
-      document.getElementById('bg-img-x-val').textContent = '0';
-      document.getElementById('bg-img-y-val').textContent = '0';
-      document.getElementById('bg-img-scale').value = 100;
-      document.getElementById('bg-img-scale-val').textContent = '100%';
-      document.getElementById('bg-img-bgcolor').value = slides[currentSlideIdx].bgColor || '#1a1a2e';
-      document.getElementById('bg-image-offset-rows').style.display = '';
-      renderCurrent();
-      scheduleSave();
+  const files = Array.from(event.target.files || []);
+  if (!files.length || !slides.length) return;
+  pushUndo();
+  const slide = slides[currentSlideIdx];
+  const arr = getBgImages(slide);
+  let pending = files.length;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const dataURL = e.target.result;
+      ensureBgImageCached(dataURL);
+      const img = bgImageCache.get(dataURL);
+      const addLayer = () => {
+        arr.push(makeBgImage(dataURL));
+        selectedBgImageIdx = arr.length - 1; // select the newly added image
+        if (--pending === 0) {
+          bgType = 'image';
+          bgSelected = true;
+          selectedTextIdx = null;
+          refreshBgImageList();
+          syncBgImageControls();
+          refreshTextPanel();
+          renderCurrent();
+          scheduleSave();
+        }
+      };
+      if (img.complete) addLayer();
+      else img.onload = addLayer;
     };
-    if (img.complete) doRender();
-    else img.onload = doRender;
-  };
-  reader.readAsDataURL(file);
+    reader.readAsDataURL(file);
+  });
   event.target.value = '';
 }
 
-function clearBgImage() {
+// Remove a specific image layer by index.
+function removeBgImage(idx) {
   if (!slides.length) return;
+  const slide = slides[currentSlideIdx];
+  const arr = getBgImages(slide);
+  if (idx < 0 || idx >= arr.length) return;
   pushUndo();
-  bgSelected = false;
-  slides[currentSlideIdx].bgImage = null;
-  slides[currentSlideIdx].bgType = 'solid';
-  bgType = 'solid';
-  document.getElementById('bg-image-preview').style.display = 'none';
-  document.getElementById('bg-image-offset-rows').style.display = 'none';
-  document.getElementById('bg-solid-tab').classList.add('active');
-  document.getElementById('bg-image-tab').classList.remove('active');
-  document.getElementById('bg-solid-ctrl').style.display = '';
-  document.getElementById('bg-image-ctrl').style.display = 'none';
+  arr.splice(idx, 1);
+  if (selectedBgImageIdx >= arr.length) selectedBgImageIdx = arr.length - 1;
+  if (!arr.length) bgSelected = false;
+  refreshBgImageList();
+  syncBgImageControls();
   renderCurrent();
+  scheduleSave();
+}
+
+// Move an image layer up (+1, toward the front/top) or down (-1, toward the
+// back/bottom) in the stacking order. Index 0 is the bottom layer.
+function moveBgImage(idx, dir) {
+  if (!slides.length) return;
+  const slide = slides[currentSlideIdx];
+  const arr = getBgImages(slide);
+  const to = idx + dir;
+  if (idx < 0 || idx >= arr.length || to < 0 || to >= arr.length) return;
+  pushUndo();
+  const tmp = arr[idx];
+  arr[idx] = arr[to];
+  arr[to] = tmp;
+  // Keep the same layer selected after the swap.
+  if (selectedBgImageIdx === idx) selectedBgImageIdx = to;
+  else if (selectedBgImageIdx === to) selectedBgImageIdx = idx;
+  refreshBgImageList();
+  syncBgImageControls();
+  renderCurrent();
+  scheduleSave();
+}
+
+// Select which image layer the controls + canvas drag act on.
+function selectBgImage(idx) {
+  if (!slides.length) return;
+  const arr = getBgImages(slides[currentSlideIdx]);
+  if (idx < 0 || idx >= arr.length) return;
+  selectedBgImageIdx = idx;
+  bgSelected = true;
+  selectedTextIdx = null;
+  refreshBgImageList();
+  syncBgImageControls();
+  refreshTextPanel();
+  renderCurrent();
+}
+
+// Remove the currently-selected image layer.
+function clearBgImage() {
+  removeBgImage(selectedBgImageIdx);
 }
 
 function updateBgImageFit() {
   if (!slides.length) return;
+  const layer = getSelectedBgImage(slides[currentSlideIdx]);
+  if (!layer) return;
   pushUndoDebounced();
-  slides[currentSlideIdx].bgImageFit = document.getElementById('bg-image-fit').value;
+  layer.fit = document.getElementById('bg-image-fit').value;
   renderCurrent();
 }
 
 function updateBgImageOffset() {
   if (!slides.length) return;
+  const layer = getSelectedBgImage(slides[currentSlideIdx]);
+  if (!layer) return;
   pushUndoDebounced();
-  const s = slides[currentSlideIdx];
-  s.bgImageX = parseInt(document.getElementById('bg-img-x').value) || 0;
-  s.bgImageY = parseInt(document.getElementById('bg-img-y').value) || 0;
-  s.bgImageScale = parseInt(document.getElementById('bg-img-scale').value) || 100;
+  layer.x = parseInt(document.getElementById('bg-img-x').value) || 0;
+  layer.y = parseInt(document.getElementById('bg-img-y').value) || 0;
+  layer.scale = parseInt(document.getElementById('bg-img-scale').value) || 100;
   renderCurrent();
 }
 
@@ -1547,6 +1649,74 @@ function updateBgImgColor() {
   pushUndoDebounced();
   slides[currentSlideIdx].bgColor = document.getElementById('bg-img-bgcolor').value;
   renderCurrent();
+}
+
+// Rebuild the thumbnail list of image layers in the Image tab.
+function refreshBgImageList() {
+  const list = document.getElementById('bg-image-list');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!slides.length) return;
+  const arr = getBgImages(slides[currentSlideIdx]);
+  arr.forEach((layer, i) => {
+    const item = document.createElement('div');
+    item.className = 'bg-img-item' + (i === selectedBgImageIdx ? ' active' : '');
+    item.title = 'Select image ' + (i + 1);
+    const img = document.createElement('img');
+    img.src = layer.url;
+    img.alt = 'Image ' + (i + 1);
+    const del = document.createElement('button');
+    del.className = 'bg-img-item-del';
+    del.title = 'Remove this image';
+    del.textContent = '✕';
+    del.addEventListener('click', e => { e.stopPropagation(); removeBgImage(i); });
+    item.appendChild(img);
+    item.appendChild(del);
+    // Layer-order controls (only when there's more than one image).
+    if (arr.length > 1) {
+      const up = document.createElement('button');
+      up.className = 'bg-img-item-move bg-img-item-up';
+      up.title = 'Move up (bring forward)';
+      up.textContent = '▲';
+      up.disabled = (i === arr.length - 1);
+      up.addEventListener('click', e => { e.stopPropagation(); moveBgImage(i, 1); });
+      const down = document.createElement('button');
+      down.className = 'bg-img-item-move bg-img-item-down';
+      down.title = 'Move down (send backward)';
+      down.textContent = '▼';
+      down.disabled = (i === 0);
+      down.addEventListener('click', e => { e.stopPropagation(); moveBgImage(i, -1); });
+      item.appendChild(up);
+      item.appendChild(down);
+    }
+    item.addEventListener('click', () => selectBgImage(i));
+    list.appendChild(item);
+  });
+}
+
+// Sync the fit/offset/color inputs to the currently-selected image layer, and
+// show/hide the controls depending on whether any image exists.
+function syncBgImageControls() {
+  if (!slides.length) return;
+  const slide = slides[currentSlideIdx];
+  const arr = getBgImages(slide);
+  const layer = getSelectedBgImage(slide);
+  const hasImg = arr.length > 0;
+  const offsetRows = document.getElementById('bg-image-offset-rows');
+  if (offsetRows) offsetRows.style.display = hasImg ? '' : 'none';
+  const listWrap = document.getElementById('bg-image-list-wrap');
+  if (listWrap) listWrap.style.display = hasImg ? '' : 'none';
+  if (layer) {
+    document.getElementById('bg-image-fit').value = layer.fit || 'cover';
+    document.getElementById('bg-img-x').value = layer.x || 0;
+    document.getElementById('bg-img-y').value = layer.y || 0;
+    document.getElementById('bg-img-x-val').textContent = layer.x || 0;
+    document.getElementById('bg-img-y-val').textContent = layer.y || 0;
+    const sc = layer.scale != null ? layer.scale : 100;
+    document.getElementById('bg-img-scale').value = sc;
+    document.getElementById('bg-img-scale-val').textContent = sc + '%';
+  }
+  document.getElementById('bg-img-bgcolor').value = slide.bgColor || '#1a1a2e';
 }
 
 function updateBg() {
@@ -1577,12 +1747,9 @@ function applyBgToAll() {
     slide.gradAngle = s.gradAngle;
     // Only copy image properties when the source slide actually uses an image.
     // If the source is solid/gradient, leave each slide's own image intact.
-    if (s.bgImage) {
-      slide.bgImage      = s.bgImage;
-      slide.bgImageFit   = s.bgImageFit;
-      slide.bgImageX     = s.bgImageX;
-      slide.bgImageY     = s.bgImageY;
-      slide.bgImageScale = s.bgImageScale;
+    const srcImgs = getBgImages(s);
+    if (srcImgs.length) {
+      slide.bgImages = srcImgs.map(l => ({ url: l.url, fit: l.fit, x: l.x, y: l.y, scale: l.scale }));
     }
   });
   updateThumbs();
@@ -1726,7 +1893,7 @@ function updateUndoButtons() {
 }
 
 function warmBgImageCache(slideList) {
-  slideList.forEach(s => { if (s.bgImage) ensureBgImageCached(s.bgImage); });
+  slideList.forEach(s => { getBgImages(s).forEach(l => ensureBgImageCached(l.url)); });
 }
 
 function restoreSnapshot(json) {

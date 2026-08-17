@@ -110,12 +110,12 @@
       <div id="bg-image-ctrl" style="display:none">
         <div class="ctrl-row" style="flex-direction:column;align-items:stretch;gap:6px;">
           <label class="tb-btn" style="cursor:pointer;justify-content:center;text-align:center;">
-            📷 Upload Image
-            <input type="file" accept="image/*" style="display:none" onchange="setBgImage(event)">
+            📷 Add Image(s)
+            <input type="file" accept="image/*" multiple style="display:none" onchange="setBgImage(event)">
           </label>
-          <div id="bg-image-preview" style="display:none;position:relative;">
-            <img id="bg-img-thumb" style="width:100%;border-radius:4px;display:block;" alt="">
-            <button onclick="clearBgImage()" title="Remove background image" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);border:none;color:#fff;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:11px;">✕</button>
+          <div id="bg-image-list-wrap" style="display:none;">
+            <div class="small-label" style="margin-bottom:4px;">Images on this slide — click to select, ✕ to remove</div>
+            <div id="bg-image-list"></div>
           </div>
           <div class="ctrl-row" style="gap:6px;margin-top:2px;">
             <span class="small-label">Fit:</span>
