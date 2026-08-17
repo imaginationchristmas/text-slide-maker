@@ -309,31 +309,31 @@ function renderSlideToSize(slide, targetW, targetH) {
   }
   // Image layers on top, drawn in order (index 0 = bottom). Multiple images
   // can be stacked on one slide.
+  // Images are treated as placed design elements: size/position are computed
+  // in the 1080×1080 design space, then scaled uniformly by the width ratio
+  // (like text). This keeps the same relative size & position across formats.
   const bgImages = getBgImages(slide);
+  const designScale = targetW / CANVAS_SIZE;
   bgImages.forEach(layer => {
     const img = bgImageCache.get(layer.url);
     if (img && img.complete && img.naturalWidth) {
       const fit = layer.fit || 'cover';
       const iw = img.naturalWidth, ih = img.naturalHeight;
-      let dx = 0, dy = 0, dw = targetW, dh = targetH;
-      // Scale offsets from 1080-space to targetW-space
-      const offX = (layer.x || 0) * (targetW / CANVAS_SIZE);
-      const offY = (layer.y || 0) * (targetH / CANVAS_SIZE);
       const userScale = (layer.scale != null ? layer.scale : 100) / 100;
+      let dw, dh;
       if (fit === 'cover') {
-        const scale = Math.max(targetW / iw, targetH / ih) * userScale;
-        dw = iw * scale; dh = ih * scale;
-        dx = (targetW - dw) / 2 + offX; dy = (targetH - dh) / 2 + offY;
+        const s = Math.max(CANVAS_SIZE / iw, CANVAS_SIZE / ih) * userScale;
+        dw = iw * s; dh = ih * s;
       } else if (fit === 'contain') {
-        const scale = Math.min(targetW / iw, targetH / ih) * userScale;
-        dw = iw * scale; dh = ih * scale;
-        dx = (targetW - dw) / 2 + offX; dy = (targetH - dh) / 2 + offY;
+        const s = Math.min(CANVAS_SIZE / iw, CANVAS_SIZE / ih) * userScale;
+        dw = iw * s; dh = ih * s;
       } else {
         // stretch — scale still applies
-        dw = targetW * userScale; dh = targetH * userScale;
-        dx = (targetW - dw) / 2 + offX; dy = (targetH - dh) / 2 + offY;
+        dw = CANVAS_SIZE * userScale; dh = CANVAS_SIZE * userScale;
       }
-      g.drawImage(img, dx, dy, dw, dh);
+      const dx = ((CANVAS_SIZE - dw) / 2 + (layer.x || 0)) * designScale;
+      const dy = ((CANVAS_SIZE - dh) / 2 + (layer.y || 0)) * designScale;
+      g.drawImage(img, dx, dy, dw * designScale, dh * designScale);
     }
   });
 
@@ -563,21 +563,20 @@ function getBgImageLayerRect(slide, layer) {
   const iw = img.naturalWidth, ih = img.naturalHeight;
   const fit = layer.fit || 'cover';
   const userScale = (layer.scale != null ? layer.scale : 100) / 100;
-  const offX = (layer.x || 0) * (fmt.w / 1080);
-  const offY = (layer.y || 0) * (fmt.h / 1080);
+  const designScale = fmt.w / CANVAS_SIZE;
   let dw, dh;
   if (fit === 'cover') {
-    const s = Math.max(fmt.w / iw, fmt.h / ih) * userScale;
+    const s = Math.max(CANVAS_SIZE / iw, CANVAS_SIZE / ih) * userScale;
     dw = iw * s; dh = ih * s;
   } else if (fit === 'contain') {
-    const s = Math.min(fmt.w / iw, fmt.h / ih) * userScale;
+    const s = Math.min(CANVAS_SIZE / iw, CANVAS_SIZE / ih) * userScale;
     dw = iw * s; dh = ih * s;
   } else {
-    dw = fmt.w * userScale; dh = fmt.h * userScale;
+    dw = CANVAS_SIZE * userScale; dh = CANVAS_SIZE * userScale;
   }
-  const dx = (fmt.w - dw) / 2 + offX;
-  const dy = (fmt.h - dh) / 2 + offY;
-  return { dx, dy, dw, dh };
+  const dx = ((CANVAS_SIZE - dw) / 2 + (layer.x || 0)) * designScale;
+  const dy = ((CANVAS_SIZE - dh) / 2 + (layer.y || 0)) * designScale;
+  return { dx, dy, dw: dw * designScale, dh: dh * designScale };
 }
 
 // Rect for the currently-selected image layer (drives the selection box).
@@ -748,14 +747,15 @@ document.querySelectorAll('.bg-corner-handle').forEach(handle => {
     const fmt = EXPORT_FORMATS[previewSize];
     const iw = img.naturalWidth, ih = img.naturalHeight;
     const fit = layer.fit || 'cover';
+    const designScale = fmt.w / CANVAS_SIZE;
     if (fit === 'cover') {
-      const s = Math.max(fmt.w / iw, fmt.h / ih);
-      bgResizeBaseW = iw * s; bgResizeBaseH = ih * s;
+      const s = Math.max(CANVAS_SIZE / iw, CANVAS_SIZE / ih);
+      bgResizeBaseW = iw * s * designScale; bgResizeBaseH = ih * s * designScale;
     } else if (fit === 'contain') {
-      const s = Math.min(fmt.w / iw, fmt.h / ih);
-      bgResizeBaseW = iw * s; bgResizeBaseH = ih * s;
+      const s = Math.min(CANVAS_SIZE / iw, CANVAS_SIZE / ih);
+      bgResizeBaseW = iw * s * designScale; bgResizeBaseH = ih * s * designScale;
     } else {
-      bgResizeBaseW = fmt.w; bgResizeBaseH = fmt.h;
+      bgResizeBaseW = CANVAS_SIZE * designScale; bgResizeBaseH = CANVAS_SIZE * designScale;
     }
     e.preventDefault();
   });
@@ -943,7 +943,7 @@ window.addEventListener('mousemove', e => {
     const newCenterX = newDx + newAbsDw / 2;
     const newCenterY = newDy + newAbsDh / 2;
     const newOffX = (newCenterX - fmt.w / 2) * (1080 / fmt.w);
-    const newOffY = (newCenterY - fmt.h / 2) * (1080 / fmt.h);
+    const newOffY = (newCenterY - fmt.h / 2) * (1080 / fmt.w);
 
     const layer = getSelectedBgImage(slide);
     if (!layer) { draggingBgResize = null; return; }
@@ -966,7 +966,7 @@ window.addEventListener('mousemove', e => {
     const dy = (e.clientY - bgDragStartY) / scale;
     const fmt = EXPORT_FORMATS[previewSize];
     const designDx = Math.round(dx * (CANVAS_SIZE / fmt.w));
-    const designDy = Math.round(dy * (CANVAS_SIZE / fmt.h));
+    const designDy = Math.round(dy * (CANVAS_SIZE / fmt.w));
     const layer = getSelectedBgImage(slide);
     if (!layer) { draggingBg = false; return; }
     layer.x = Math.max(-540, Math.min(540, bgDragOriginX + designDx));
