@@ -57,6 +57,88 @@ const FONT_REGISTRY = [
   },
 ];
 
+// ─── GOOGLE FONT REGISTRY ─────────────────────────────────────────────────────
+// Curated, categorized metadata only — no files in the repo. Fonts are loaded
+// on-demand from the Google Fonts CSS API (fonts.googleapis.com/css2) the first
+// time one is previewed or chosen. `weights` lists the weights Google serves
+// for that family so we never request a weight that would 404. `variable: true`
+// means the family is served as a variable font covering the full range.
+// category ∈ sans | serif | display | handwriting | monospace.
+
+const GOOGLE_FONT_REGISTRY = [
+  // ── Sans ──────────────────────────────────────────────────────────────────
+  { family: 'Inter',             category: 'sans', weights: [100,200,300,400,500,600,700,800,900], variable: true },
+  { family: 'Roboto',            category: 'sans', weights: [100,300,400,500,700,900] },
+  { family: 'Open Sans',         category: 'sans', weights: [300,400,500,600,700,800], variable: true },
+  { family: 'Lato',              category: 'sans', weights: [100,300,400,700,900] },
+  { family: 'Montserrat',        category: 'sans', weights: [100,200,300,400,500,600,700,800,900], variable: true },
+  { family: 'Poppins',           category: 'sans', weights: [100,200,300,400,500,600,700,800,900] },
+  { family: 'Nunito',            category: 'sans', weights: [200,300,400,500,600,700,800,900], variable: true },
+  { family: 'Work Sans',         category: 'sans', weights: [100,200,300,400,500,600,700,800,900], variable: true },
+  { family: 'Oswald',            category: 'sans', weights: [200,300,400,500,600,700], variable: true },
+  { family: 'Raleway',           category: 'sans', weights: [100,200,300,400,500,600,700,800,900], variable: true },
+  { family: 'Bebas Neue',        category: 'sans', weights: [400] },
+  { family: 'Anton',             category: 'sans', weights: [400] },
+  { family: 'Archivo Black',     category: 'sans', weights: [400] },
+
+  // ── Serif ─────────────────────────────────────────────────────────────────
+  { family: 'Playfair Display',  category: 'serif', weights: [400,500,600,700,800,900], variable: true },
+  { family: 'Merriweather',      category: 'serif', weights: [300,400,700,900] },
+  { family: 'Lora',              category: 'serif', weights: [400,500,600,700], variable: true },
+  { family: 'Georgia',           category: 'serif', weights: [400,700] },
+  { family: 'EB Garamond',       category: 'serif', weights: [400,500,600,700,800], variable: true },
+  { family: 'Libre Baskerville', category: 'serif', weights: [400,700] },
+  { family: 'Cormorant Garamond',category: 'serif', weights: [300,400,500,600,700] },
+  { family: 'Crimson Text',      category: 'serif', weights: [400,600,700] },
+
+  // ── Display ───────────────────────────────────────────────────────────────
+  { family: 'Lobster',           category: 'display', weights: [400] },
+  { family: 'Pacifico',          category: 'display', weights: [400] },
+  { family: 'Righteous',         category: 'display', weights: [400] },
+  { family: 'Abril Fatface',     category: 'display', weights: [400] },
+  { family: 'Alfa Slab One',     category: 'display', weights: [400] },
+  { family: 'Fredoka One',       category: 'display', weights: [400] },
+  { family: 'Bungee',            category: 'display', weights: [400] },
+  { family: 'Monoton',           category: 'display', weights: [400] },
+
+  // ── Handwriting ───────────────────────────────────────────────────────────
+  { family: 'Dancing Script',    category: 'handwriting', weights: [400,500,600,700], variable: true },
+  { family: 'Caveat',            category: 'handwriting', weights: [400,500,600,700], variable: true },
+  { family: 'Satisfy',           category: 'handwriting', weights: [400] },
+  { family: 'Great Vibes',       category: 'handwriting', weights: [400] },
+  { family: 'Kalam',             category: 'handwriting', weights: [300,400,700] },
+  { family: 'Permanent Marker',  category: 'handwriting', weights: [400] },
+  { family: 'Shadows Into Light',category: 'handwriting', weights: [400] },
+
+  // ── Monospace ─────────────────────────────────────────────────────────────
+  { family: 'Roboto Mono',       category: 'monospace', weights: [100,200,300,400,500,600,700], variable: true },
+  { family: 'Source Code Pro',   category: 'monospace', weights: [200,300,400,500,600,700,800,900], variable: true },
+  { family: 'Space Mono',        category: 'monospace', weights: [400,700] },
+  { family: 'Fira Code',         category: 'monospace', weights: [300,400,500,600,700], variable: true },
+  { family: 'Inconsolata',       category: 'monospace', weights: [200,300,400,500,600,700,800,900], variable: true },
+];
+
+// Category metadata for the picker tabs (order matters).
+const FONT_CATEGORIES = [
+  { key: 'local',       label: 'Local' },
+  { key: 'sans',        label: 'Sans' },
+  { key: 'serif',       label: 'Serif' },
+  { key: 'display',     label: 'Display' },
+  { key: 'handwriting', label: 'Handwriting' },
+  { key: 'monospace',   label: 'Mono' },
+];
+
+// Lookup: family name → Google registry entry (undefined for local fonts).
+const GOOGLE_FONT_MAP = new Map(GOOGLE_FONT_REGISTRY.map(f => [f.family, f]));
+
+// Tracks which Google families have had their css2 <link> injected, and which
+// specific faces have finished loading, so we never fetch twice.
+const googleFontLinksInjected = new Set();
+const googleFontFacesLoaded = new Set();
+// family → Promise that resolves once the injected css2 <link> has loaded,
+// so document.fonts.load() sees the @font-face rules. Shared across calls.
+const googleFontLinkPromises = new Map();
+
 // ─── EXPORT FORMATS ───────────────────────────────────────────────────────────
 
 const CANVAS_SIZE = 1080;
@@ -299,10 +381,75 @@ async function loadFonts() {
   await Promise.allSettled(promises);
 }
 
+// ─── GOOGLE FONT LOADER ───────────────────────────────────────────────────────
+// Lazily loads a Google family from the css2 API. Injects one <link> per family
+// (tracked in googleFontLinksInjected) and awaits the specific weight/style face
+// via document.fonts.load (tracked in googleFontFacesLoaded). Safe to call
+// repeatedly — already-loaded faces resolve immediately. Returns true on success,
+// false if the family is unknown or the load failed (e.g. offline).
+
+function googleFontCssUrl(entry) {
+  const fam = encodeURIComponent(entry.family).replace(/%20/g, '+');
+  // Request every weight in both normal + italic so the picker/italic toggle work.
+  const ital = entry.weights.map(w => `0,${w}`).concat(entry.weights.map(w => `1,${w}`));
+  return `https://fonts.googleapis.com/css2?family=${fam}:ital,wght@${ital.join(';')}&display=swap`;
+}
+
+async function ensureGoogleFont(familyName, weight, style) {
+  const entry = GOOGLE_FONT_MAP.get(familyName);
+  if (!entry) return false;
+  const w = String(weight || 400);
+  const st = style || 'normal';
+  const faceKey = `${familyName}|${w}|${st}`;
+  if (googleFontFacesLoaded.has(faceKey)) return true;
+
+  // Inject the family stylesheet once, and await its load so the @font-face
+  // rules are registered before we call document.fonts.load(). Without this,
+  // load() finds no matching face and resolves empty (the bug we hit).
+  if (!googleFontLinksInjected.has(familyName)) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = googleFontCssUrl(entry);
+    const p = new Promise(res => { link.onload = res; link.onerror = res; });
+    document.head.appendChild(link);
+    googleFontLinksInjected.add(familyName);
+    googleFontLinkPromises.set(familyName, p);
+  }
+  // Wait for the stylesheet (if we injected it) before probing for the face.
+  if (googleFontLinkPromises.has(familyName)) {
+    await googleFontLinkPromises.get(familyName);
+  }
+
+  try {
+    const fontSpec = `${st === 'italic' ? 'italic ' : ''}${w} 32px "${familyName}"`;
+    const loaded = await document.fonts.load(fontSpec);
+    // document.fonts.load resolves even on failure (empty array) — verify.
+    const ok = loaded.length > 0 && document.fonts.check(fontSpec);
+    if (ok) {
+      googleFontFacesLoaded.add(faceKey);
+      return true;
+    }
+    console.warn(`Google font not usable after load: ${familyName} ${w} ${st}`);
+    return false;
+  } catch (err) {
+    console.warn(`Failed to load Google font: ${familyName} ${w} ${st}`, err);
+    return false;
+  }
+}
+
 function buildFontFamilySelect() {
   const sel = document.getElementById('font-family');
   sel.innerHTML = '';
   FONT_REGISTRY.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f.family;
+    opt.textContent = f.family;
+    sel.appendChild(opt);
+  });
+  // Google families must also exist as options: setting select.value to a value
+  // with no matching <option> silently fails (value becomes ''), which previously
+  // corrupted tb.fontFamily to '' and made the canvas fall back to sans-serif.
+  GOOGLE_FONT_REGISTRY.forEach(f => {
     const opt = document.createElement('option');
     opt.value = f.family;
     opt.textContent = f.family;
@@ -313,6 +460,16 @@ function buildFontFamilySelect() {
 function buildFontWeightSelect(familyName) {
   const sel = document.getElementById('font-weight');
   sel.innerHTML = '';
+  const google = GOOGLE_FONT_MAP.get(familyName);
+  if (google) {
+    google.weights.forEach(w => {
+      const opt = document.createElement('option');
+      opt.value = String(w);
+      opt.textContent = weightLabel(w);
+      sel.appendChild(opt);
+    });
+    return;
+  }
   const family = FONT_REGISTRY.find(f => f.family === familyName);
   if (!family) return;
   // Deduplicate by weight (show each weight once)
@@ -337,13 +494,149 @@ function weightLabel(w) {
 
 function onFontFamilyChange() {
   const family = document.getElementById('font-family').value;
+  applyFontFamilySelection(family);
+}
+
+// Sets the family on the selected text block, rebuilds the weight list, picks a
+// sensible default weight, loads the font if it's a Google family, then applies.
+async function applyFontFamilySelection(family) {
   buildFontWeightSelect(family);
-  // Set weight to first available
-  const familyDef = FONT_REGISTRY.find(f => f.family === family);
-  if (familyDef && familyDef.variants.length > 0) {
-    document.getElementById('font-weight').value = String(familyDef.variants[0].weight);
+  const weightSel = document.getElementById('font-weight');
+  const google = GOOGLE_FONT_MAP.get(family);
+  if (google) {
+    // Default to 400 if offered, else first weight.
+    const def = google.weights.includes(400) ? 400 : google.weights[0];
+    weightSel.value = String(def);
+  } else {
+    const familyDef = FONT_REGISTRY.find(f => f.family === family);
+    if (familyDef && familyDef.variants.length > 0) {
+      weightSel.value = String(familyDef.variants[0].weight);
+    }
   }
+  // Sync the hidden select + trigger label so updateTextBlock reads the family.
+  // Guard: if the option is somehow missing (e.g. a family from an imported
+  // project not in either registry), append it so .value sticks.
+  const famSel = document.getElementById('font-family');
+  if (![...famSel.options].some(o => o.value === family)) {
+    const opt = document.createElement('option');
+    opt.value = family;
+    opt.textContent = family;
+    famSel.appendChild(opt);
+  }
+  famSel.value = family;
+  updateFontPickerCurrent(family);
   updateTextBlock();
+  // Load the face, then re-render so the canvas swaps to the real typeface.
+  if (google) {
+    const style = document.getElementById('font-style').value;
+    await ensureGoogleFont(family, weightSel.value, style);
+    renderCurrent();
+    refreshTextList();
+  }
+}
+
+// ─── FONT PICKER ──────────────────────────────────────────────────────────────
+
+let fontPickerCategory = 'local';
+let fontPickerObserver = null;
+
+function toggleFontPicker(e) {
+  if (e) e.stopPropagation();
+  const panel = document.getElementById('font-picker');
+  const open = panel.style.display !== 'none';
+  if (open) { closeFontPicker(); return; }
+  panel.style.display = '';
+  buildFontPickerTabs();
+  renderFontPickerList();
+  // Close when clicking anywhere outside the picker or trigger.
+  setTimeout(() => document.addEventListener('mousedown', fontPickerOutside), 0);
+}
+
+function closeFontPicker() {
+  document.getElementById('font-picker').style.display = 'none';
+  document.removeEventListener('mousedown', fontPickerOutside);
+  if (fontPickerObserver) { fontPickerObserver.disconnect(); fontPickerObserver = null; }
+}
+
+function fontPickerOutside(e) {
+  const panel = document.getElementById('font-picker');
+  const trigger = document.getElementById('font-picker-trigger');
+  if (!panel.contains(e.target) && !trigger.contains(e.target)) closeFontPicker();
+}
+
+function updateFontPickerCurrent(family) {
+  const el = document.getElementById('font-picker-current');
+  if (el) el.textContent = family;
+}
+
+function buildFontPickerTabs() {
+  const tabs = document.getElementById('font-picker-tabs');
+  tabs.innerHTML = '';
+  FONT_CATEGORIES.forEach(cat => {
+    const b = document.createElement('button');
+    b.className = 'font-picker-tab' + (cat.key === fontPickerCategory ? ' active' : '');
+    b.textContent = cat.label;
+    b.onclick = () => { fontPickerCategory = cat.key; buildFontPickerTabs(); renderFontPickerList(); };
+    tabs.appendChild(b);
+  });
+}
+
+function renderFontPickerList() {
+  const list = document.getElementById('font-picker-list');
+  list.innerHTML = '';
+  if (fontPickerObserver) { fontPickerObserver.disconnect(); fontPickerObserver = null; }
+
+  const currentFamily = document.getElementById('font-family').value;
+  let entries;
+  if (fontPickerCategory === 'local') {
+    entries = FONT_REGISTRY.map(f => ({ family: f.family, cat: 'Local', google: false }));
+  } else {
+    entries = GOOGLE_FONT_REGISTRY
+      .filter(f => f.category === fontPickerCategory)
+      .map(f => ({ family: f.family, cat: FONT_CATEGORIES.find(c => c.key === f.category).label, google: true }));
+  }
+
+  // Lazy-load each Google row's font when it scrolls into view.
+  if (fontPickerCategory !== 'local' && 'IntersectionObserver' in window) {
+    fontPickerObserver = new IntersectionObserver((obs) => {
+      obs.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const el = entry.target;
+        fontPickerObserver.unobserve(el);
+        const fam = el.dataset.family;
+        ensureGoogleFont(fam, 400, 'normal').then(() => {
+          el.querySelector('.font-picker-name').style.fontFamily = `'${fam}', sans-serif`;
+        });
+      });
+    }, { root: list, rootMargin: '40px' });
+  }
+
+  entries.forEach(ent => {
+    const row = document.createElement('button');
+    row.className = 'font-picker-row' + (ent.family === currentFamily ? ' active' : '');
+    row.dataset.family = ent.family;
+    const name = document.createElement('span');
+    name.className = 'font-picker-name';
+    name.textContent = ent.family;
+    if (!ent.google) {
+      // Local fonts are already loaded — render in their own typeface now.
+      name.style.fontFamily = `'${ent.family}', sans-serif`;
+    }
+    const cat = document.createElement('span');
+    cat.className = 'font-picker-cat';
+    cat.textContent = ent.cat;
+    row.appendChild(name);
+    row.appendChild(cat);
+    row.onclick = () => { selectFontFromPicker(ent.family); };
+    list.appendChild(row);
+    if (ent.google && fontPickerObserver) fontPickerObserver.observe(row);
+  });
+}
+
+function selectFontFromPicker(family) {
+  applyFontFamilySelection(family);
+  // Re-render list so the active highlight moves; keep picker open for browsing.
+  renderFontPickerList();
 }
 
 // ─── RENDERING ────────────────────────────────────────────────────────────────
@@ -1669,8 +1962,19 @@ function refreshTextPanel() {
 
   document.getElementById('text-content').value = tb.text;
 
-  // Font family
-  document.getElementById('font-family').value = tb.fontFamily;
+  // Font family — guard against blocks saved with an empty/corrupt family
+  // (a prior bug let tb.fontFamily become '' when the hidden select had no
+  // matching option). Fall back to the registry default so the UI never
+  // shows a blank family.
+  if (!tb.fontFamily) tb.fontFamily = FONT_REGISTRY[0].family;
+  const famSelPanel = document.getElementById('font-family');
+  if (![...famSelPanel.options].some(o => o.value === tb.fontFamily)) {
+    const opt = document.createElement('option');
+    opt.value = tb.fontFamily;
+    opt.textContent = tb.fontFamily;
+    famSelPanel.appendChild(opt);
+  }
+  famSelPanel.value = tb.fontFamily;
   buildFontWeightSelect(tb.fontFamily);
   document.getElementById('font-weight').value = tb.fontWeight;
   document.getElementById('font-style').value  = tb.fontStyle;
@@ -1738,7 +2042,10 @@ function updateTextBlock() {
   pushUndoDebounced();
   const tb = slides[currentSlideIdx].textBlocks[selectedTextIdx];
   tb.text          = document.getElementById('text-content').value;
-  tb.fontFamily    = document.getElementById('font-family').value;
+  // Never persist an empty family — if the select somehow has no valid value,
+  // keep the block's existing family rather than corrupting it to ''.
+  const famVal = document.getElementById('font-family').value;
+  if (famVal) tb.fontFamily = famVal;
   tb.fontWeight    = document.getElementById('font-weight').value;
   tb.fontStyle     = document.getElementById('font-style').value;
   tb.fontSize      = parseInt(document.getElementById('font-size').value);
@@ -1759,6 +2066,13 @@ function updateTextBlock() {
   tb.strokeWidth   = parseInt(document.getElementById('stroke-width').value);
   refreshTextList();
   renderCurrent();
+  // Google faces load async — re-render once the chosen weight/style is ready.
+  if (GOOGLE_FONT_MAP.has(tb.fontFamily)) {
+    ensureGoogleFont(tb.fontFamily, tb.fontWeight, tb.fontStyle).then(() => {
+      renderCurrent();
+      refreshTextList();
+    });
+  }
 }
 
 function setAlign(a) {
@@ -2273,8 +2587,25 @@ function loadFromLocal() {
     slides = state.slides;
     currentSlideIdx = Math.min(state.currentSlideIdx || 0, slides.length - 1);
     warmBgImageCache(slides);
+    preloadGoogleFonts(slides);
     return true;
   } catch(e) { return false; }
+}
+
+// Scan all text blocks for Google families and load each unique face so the
+// first render uses the real typeface instead of a fallback. Re-renders when done.
+function preloadGoogleFonts(slideList) {
+  const faces = new Set();
+  slideList.forEach(s => (s.textBlocks || []).forEach(tb => {
+    if (tb && GOOGLE_FONT_MAP.has(tb.fontFamily)) {
+      faces.add(`${tb.fontFamily}|${tb.fontWeight || 400}|${tb.fontStyle || 'normal'}`);
+    }
+  }));
+  if (!faces.size) return Promise.resolve();
+  return Promise.all([...faces].map(key => {
+    const [family, weight, style] = key.split('|');
+    return ensureGoogleFont(family, weight, style);
+  })).then(() => renderCurrent());
 }
 
 // ─── EXPORT / IMPORT PROJECT JSON ─────────────────────────────────────────────
@@ -2305,6 +2636,7 @@ function importProject(event) {
       slides = state.slides;
       currentSlideIdx = Math.min(state.currentSlideIdx || 0, slides.length - 1);
       clearSelection();
+      preloadGoogleFonts(slides);
       refreshSlidePicker();
       loadSlideToUI();
       renderCurrent();
@@ -2406,6 +2738,7 @@ function closeExport() {
 
 async function doExport() {
   if (!slides.length) return;
+  await preloadGoogleFonts(slides);
   const prefix = document.getElementById('export-prefix').value || 'slide';
   const fmt = EXPORT_FORMATS[selectedFmt];
   const prog = document.getElementById('export-progress');
@@ -2691,6 +3024,7 @@ function lzwEncode(indices, minCodeSize) {
 
 async function doExportGif() {
   if (!slides.length) return;
+  await preloadGoogleFonts(slides);
   const prefix = document.getElementById('export-prefix').value || 'slide';
   const fmt = EXPORT_FORMATS[selectedFmt];
   const gifW = parseInt(document.getElementById('gif-size').value);
@@ -3038,6 +3372,7 @@ const Mp4Muxer = (() => {
 
 async function doExportMp4() {
   if (!slides.length) return;
+  await preloadGoogleFonts(slides);
 
   // Feature detection
   if (typeof VideoEncoder === 'undefined') {

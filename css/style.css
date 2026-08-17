@@ -628,6 +628,62 @@ input[type=color] {
 }
 .bg-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
+/* Font picker */
+.font-picker-trigger {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  height: 30px; padding: 0 9px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border2);
+  background: var(--panel2);
+  color: var(--text);
+  font-family: inherit; font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+  text-align: left;
+}
+.font-picker-trigger:hover { background: var(--hover-bg); border-color: var(--hover-border); }
+.font-picker-caret { color: var(--text2); font-size: 10px; flex-shrink: 0; }
+
+#font-picker {
+  margin-top: 6px;
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  background: var(--panel2);
+  overflow: hidden;
+}
+#font-picker-tabs {
+  display: flex; flex-wrap: wrap; gap: 3px;
+  padding: 7px 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+.font-picker-tab {
+  height: 23px; padding: 0 8px;
+  border: none; border-radius: 4px 4px 0 0;
+  background: transparent; color: var(--text2);
+  font-family: inherit; font-size: 10.5px; font-weight: 600;
+  cursor: pointer; transition: color 0.12s, background 0.12s;
+}
+.font-picker-tab:hover { color: var(--text); }
+.font-picker-tab.active { color: var(--accent); background: var(--accent-glow); }
+
+#font-picker-list {
+  max-height: 240px; overflow-y: auto;
+  padding: 4px;
+}
+.font-picker-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; padding: 7px 9px;
+  border: none; border-radius: 4px;
+  background: transparent; color: var(--text);
+  font-size: 15px; text-align: left;
+  cursor: pointer; transition: background 0.1s;
+}
+.font-picker-row:hover { background: var(--hover-bg); }
+.font-picker-row.active { background: var(--accent-glow); }
+.font-picker-row.active .font-picker-name { color: var(--accent); }
+.font-picker-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.font-picker-cat { font-size: 9px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0; }
+
 /* Gradient presets */
 .grad-presets { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
 .grad-preset {
@@ -1194,6 +1250,15 @@ input[type=color] {
   box-shadow: inset -1px -1px 0 var(--bevel-dark), inset 1px 1px 0 var(--bevel-light);
 }
 [data-skin="dos"] .bg-tab.active { background: var(--accent); border-color: var(--accent); color: #0000a8; font-weight: 700; }
+[data-skin="dos"] .font-picker-trigger { border-radius: 0; border: 1px solid var(--border2); background: var(--panel2); }
+[data-skin="dos"] .font-picker-trigger:hover { background: var(--hover-bg); border-color: var(--hover-border); color: var(--accent); }
+[data-skin="dos"] #font-picker { border-radius: 0; border: 2px solid var(--border2); }
+[data-skin="dos"] .font-picker-tab { border-radius: 0; text-transform: uppercase; letter-spacing: 0.05em; }
+[data-skin="dos"] .font-picker-tab.active { color: var(--accent); background: var(--hover-bg); }
+[data-skin="dos"] .font-picker-row { border-radius: 0; }
+[data-skin="dos"] .font-picker-row:hover { background: var(--hover-bg); }
+[data-skin="dos"] .font-picker-row.active { background: var(--hover-bg); }
+[data-skin="dos"] .font-picker-row.active .font-picker-name { color: var(--accent); }
 [data-skin="dos"] .grad-preset { border-radius: 0; border: 2px solid var(--border); transition: none; }
 [data-skin="dos"] .grad-preset:hover, [data-skin="dos"] .grad-preset.active { border-color: var(--accent); }
 [data-skin="dos"] .apply-all-btn {

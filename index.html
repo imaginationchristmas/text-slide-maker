@@ -195,7 +195,15 @@
     <div class="ctrl-section" id="font-controls" style="display:none">
       <span class="ctrl-label">Font</span>
       <div class="ctrl-row">
-        <select id="font-family" onchange="onFontFamilyChange()" style="flex:1;"></select>
+        <button id="font-picker-trigger" class="font-picker-trigger" onclick="toggleFontPicker(event)" style="flex:1;">
+          <span id="font-picker-current">Neue Haas Display</span>
+          <span class="font-picker-caret">▾</span>
+        </button>
+        <select id="font-family" onchange="onFontFamilyChange()" style="display:none;"></select>
+      </div>
+      <div id="font-picker" style="display:none;">
+        <div id="font-picker-tabs"></div>
+        <div id="font-picker-list"></div>
       </div>
       <div class="ctrl-row font-weight-row">
         <select id="font-weight" onchange="updateTextBlock()" style="flex:1;"></select>
