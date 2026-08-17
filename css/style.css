@@ -373,6 +373,22 @@ body {
 .bg-corner-handle[data-corner="tr"] { cursor: nesw-resize; top: 0; left: 100%; }
 .bg-corner-handle[data-corner="bl"] { cursor: nesw-resize; top: 100%; left: 0; }
 .bg-corner-handle[data-corner="br"] { cursor: nwse-resize; top: 100%; left: 100%; }
+/* Edge-midpoint handles — resize symmetrically about the image center */
+.bg-edge-handle {
+  position: absolute;
+  width: 12px; height: 12px;
+  background: #fff;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  z-index: 10;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  pointer-events: all;
+}
+.bg-edge-handle[data-edge="t"] { cursor: ns-resize; top: 0; left: 50%; }
+.bg-edge-handle[data-edge="b"] { cursor: ns-resize; top: 100%; left: 50%; }
+.bg-edge-handle[data-edge="l"] { cursor: ew-resize; top: 50%; left: 0; }
+.bg-edge-handle[data-edge="r"] { cursor: ew-resize; top: 50%; left: 100%; }
 
 /* Selected text-block box + width resize handle */
 #text-selection-box {
@@ -1131,6 +1147,7 @@ input[type=color] {
 }
 [data-skin="dos"] #main-canvas, [data-skin="dos"] #canvas-overlay { border-radius: 0; }
 [data-skin="dos"] .bg-corner-handle { background: var(--accent); border: 2px solid #000; border-radius: 0; box-shadow: none; }
+[data-skin="dos"] .bg-edge-handle { background: var(--accent); border: 2px solid #000; border-radius: 0; box-shadow: none; }
 [data-skin="dos"] #text-width-handle { background: var(--accent); border: 2px solid #000; border-radius: 0; box-shadow: none; }
 [data-skin="dos"] #canvas-size-label { color: var(--text2); letter-spacing: 0.10em; text-transform: uppercase; }
 [data-skin="dos"] #canvas-size-label::before { content: '[ '; color: var(--text3); }

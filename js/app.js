@@ -99,8 +99,9 @@ let groupDragStartX = 0, groupDragStartY = 0; // client coords at drag start
 let groupDragOrigins = []; // [{ type, idx, x, y }] positions at drag start
 // Background image selection + resize state
 let bgSelected = false;
-let draggingBgResize = null; // 'tl'|'tr'|'bl'|'br' or null
-// Anchor corner position in canvas-pixel space (opposite corner, stays fixed)
+let draggingBgResize = null; // corner 'tl'|'tr'|'bl'|'br', edge 't'|'b'|'l'|'r', or null
+// Anchor point in canvas-pixel space. For corners this is the opposite corner
+// (stays fixed); for edges it's the image center (stays fixed).
 let bgResizeAnchorX = 0, bgResizeAnchorY = 0;
 // Original image rect at drag start (canvas-pixel space)
 let bgResizeStartRect = null; // {dx,dy,dw,dh}
@@ -852,6 +853,30 @@ function hitTestTextBlocks(slide, mx, my) {
 }
 
 // Corner handle mousedown — start resize drag
+// Compute the image's base dimensions (what scale=100 produces) for the
+// selected layer's fit mode, in canvas-pixel space. Shared by corner and edge
+// resize handles.
+function computeBgResizeBase(slide) {
+  const layer = getSelectedBgImage(slide);
+  if (!layer) return false;
+  const img = bgImageCache.get(layer.url);
+  if (!img) return false;
+  const fmt = EXPORT_FORMATS[previewSize];
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  const fit = layer.fit || 'cover';
+  const designScale = fmt.w / CANVAS_SIZE;
+  if (fit === 'cover') {
+    const s = Math.max(CANVAS_SIZE / iw, CANVAS_SIZE / ih);
+    bgResizeBaseW = iw * s * designScale; bgResizeBaseH = ih * s * designScale;
+  } else if (fit === 'contain') {
+    const s = Math.min(CANVAS_SIZE / iw, CANVAS_SIZE / ih);
+    bgResizeBaseW = iw * s * designScale; bgResizeBaseH = ih * s * designScale;
+  } else {
+    bgResizeBaseW = CANVAS_SIZE * designScale; bgResizeBaseH = CANVAS_SIZE * designScale;
+  }
+  return true;
+}
+
 document.querySelectorAll('.bg-corner-handle').forEach(handle => {
   handle.addEventListener('mousedown', e => {
     e.stopPropagation();
@@ -866,24 +891,29 @@ document.querySelectorAll('.bg-corner-handle').forEach(handle => {
     bgResizeAnchorX = corner === 'tl' || corner === 'bl' ? dx + dw : dx;
     bgResizeAnchorY = corner === 'tl' || corner === 'tr' ? dy + dh : dy;
     bgResizeStartRect = { dx, dy, dw, dh };
-    // Compute base dimensions (what scale=100 produces) for the selected layer
-    const layer = getSelectedBgImage(slide);
-    if (!layer) return;
-    const img = bgImageCache.get(layer.url);
-    if (!img) return;
-    const fmt = EXPORT_FORMATS[previewSize];
-    const iw = img.naturalWidth, ih = img.naturalHeight;
-    const fit = layer.fit || 'cover';
-    const designScale = fmt.w / CANVAS_SIZE;
-    if (fit === 'cover') {
-      const s = Math.max(CANVAS_SIZE / iw, CANVAS_SIZE / ih);
-      bgResizeBaseW = iw * s * designScale; bgResizeBaseH = ih * s * designScale;
-    } else if (fit === 'contain') {
-      const s = Math.min(CANVAS_SIZE / iw, CANVAS_SIZE / ih);
-      bgResizeBaseW = iw * s * designScale; bgResizeBaseH = ih * s * designScale;
-    } else {
-      bgResizeBaseW = CANVAS_SIZE * designScale; bgResizeBaseH = CANVAS_SIZE * designScale;
-    }
+    if (!computeBgResizeBase(slide)) { draggingBgResize = null; return; }
+    e.preventDefault();
+  });
+});
+
+// Edge-midpoint handles — drag one edge to resize along that axis while the
+// OPPOSITE edge stays anchored (same idea as corner resize, but one axis).
+document.querySelectorAll('.bg-edge-handle').forEach(handle => {
+  handle.addEventListener('mousedown', e => {
+    e.stopPropagation();
+    if (!slides.length) return;
+    const slide = slides[currentSlideIdx];
+    const rect = getBgImageRect(slide);
+    if (!rect) return;
+    const edge = handle.dataset.edge; // 't'|'b'|'l'|'r'
+    draggingBgResize = edge;
+    const { dx, dy, dw, dh } = rect;
+    // Anchor = the opposite edge's fixed coordinate on the dragged axis.
+    // (The other axis is centered on the image center.)
+    bgResizeAnchorX = edge === 'l' ? dx + dw : dx;        // dragging left → right edge fixed
+    bgResizeAnchorY = edge === 't' ? dy + dh : dy;        // dragging top  → bottom edge fixed
+    bgResizeStartRect = { dx, dy, dw, dh };
+    if (!computeBgResizeBase(slide)) { draggingBgResize = null; return; }
     e.preventDefault();
   });
 });
@@ -916,8 +946,9 @@ if (textWidthHandle) {
 
 overlay.addEventListener('mousedown', e => {
   if (!slides.length) return;
-  // Corner handles have their own handler
+  // Corner/edge resize handles have their own handler
   if (e.target.classList.contains('bg-corner-handle')) return;
+  if (e.target.classList.contains('bg-edge-handle')) return;
   const slide = slides[currentSlideIdx];
   const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
 
@@ -1077,24 +1108,97 @@ window.addEventListener('mousemove', e => {
     const mouseCanvasX = (e.clientX - canvasRect.left) / scale;
     const mouseCanvasY = (e.clientY - canvasRect.top)  / scale;
 
+    const baseAspect = bgResizeBaseW / Math.max(bgResizeBaseH, 0.001);
+    const isEdge = draggingBgResize === 't' || draggingBgResize === 'b' ||
+                   draggingBgResize === 'l' || draggingBgResize === 'r';
+
+    if (isEdge) {
+      // Edge-midpoint drag: resize along the dragged axis while the OPPOSITE
+      // edge stays anchored. The dragged-axis dimension is the mouse distance
+      // to that fixed edge; the other axis follows the aspect ratio and stays
+      // centered on the original image center.
+      const horizontal = draggingBgResize === 'l' || draggingBgResize === 'r';
+      // Original image center on the cross axis (stays fixed).
+      const crossCenter = horizontal
+        ? bgResizeStartRect.dy + bgResizeStartRect.dh / 2
+        : bgResizeStartRect.dx + bgResizeStartRect.dw / 2;
+      // Mouse distance from the anchored (opposite) edge = new dragged-axis size.
+      const dist = horizontal
+        ? Math.abs(mouseCanvasX - bgResizeAnchorX)
+        : Math.abs(mouseCanvasY - bgResizeAnchorY);
+      let newAbsDw, newAbsDh;
+      if (horizontal) {
+        newAbsDw = Math.max(50, dist);
+        newAbsDh = newAbsDw / baseAspect;
+      } else {
+        newAbsDh = Math.max(50, dist);
+        newAbsDw = newAbsDh * baseAspect;
+      }
+      const newScale = Math.round(Math.max(10, Math.min(150, (newAbsDw / bgResizeBaseW) * 100)));
+      // Drawn dims from the aspect-correct scale.
+      const drawnW = bgResizeBaseW * (newScale / 100);
+      const drawnH = bgResizeBaseH * (newScale / 100);
+      // Position the drawn rect: anchored edge fixed on the dragged axis,
+      // centered on the cross axis.
+      let drawnDx, drawnDy;
+      if (horizontal) {
+        drawnDx = draggingBgResize === 'l' ? bgResizeAnchorX - drawnW : bgResizeAnchorX;
+        drawnDy = crossCenter - drawnH / 2;
+      } else {
+        drawnDy = draggingBgResize === 't' ? bgResizeAnchorY - drawnH : bgResizeAnchorY;
+        drawnDx = crossCenter - drawnW / 2;
+      }
+      const newCenterX = drawnDx + drawnW / 2;
+      const newCenterY = drawnDy + drawnH / 2;
+      const newOffX = (newCenterX - fmt.w / 2) * (1080 / fmt.w);
+      const newOffY = (newCenterY - fmt.h / 2) * (1080 / fmt.w);
+
+      const layer = getSelectedBgImage(slide);
+      if (!layer) { draggingBgResize = null; return; }
+      layer.scale = newScale;
+      const yLim = bgImageYLimit();
+      layer.x = Math.round(Math.max(-540, Math.min(540, newOffX)));
+      layer.y = Math.round(Math.max(-yLim, Math.min(yLim, newOffY)));
+
+      document.getElementById('bg-img-scale').value = newScale;
+      document.getElementById('bg-img-scale-val').textContent = newScale + '%';
+      document.getElementById('bg-img-x').value = layer.x;
+      document.getElementById('bg-img-y').value = layer.y;
+      document.getElementById('bg-img-x-val').textContent = layer.x;
+      document.getElementById('bg-img-y-val').textContent = layer.y;
+      renderCurrent();
+      updateBgSelectionBox();
+      return;
+    }
+
     // Signed delta from anchor to mouse
     let rawDw = mouseCanvasX - bgResizeAnchorX;
     let rawDh = mouseCanvasY - bgResizeAnchorY;
 
-    // Shift = constrain to original aspect ratio (preserve sign)
-    if (e.shiftKey && bgResizeStartRect) {
-      const origAspect = bgResizeStartRect.dw / bgResizeStartRect.dh;
-      const absDw = Math.abs(rawDw), absDh = Math.abs(rawDh);
-      if (absDw / Math.max(absDh, 0.001) > origAspect) {
-        rawDw = Math.sign(rawDw || 1) * absDh * origAspect;
-      } else {
-        rawDh = Math.sign(rawDh || 1) * absDw / origAspect;
-      }
+    // The renderer always draws the image at its natural aspect ratio (height
+    // is derived from width via that aspect), so a corner resize must be
+    // aspect-preserving too — otherwise the drawn height would not match the
+    // dragged mouse Y and the anchored corner would appear to float. Constrain
+    // to the base aspect using whichever axis the user dragged further, then
+    // derive the scale from that same axis so the drawn rect exactly matches
+    // the anchored math and the opposite corner stays fixed.
+    // (baseAspect is already computed above, before the edge-handle branch.)
+    const signW = Math.sign(rawDw || 1);
+    const signH = Math.sign(rawDh || 1);
+    let absDw = Math.abs(rawDw);
+    let absDh = Math.abs(rawDh);
+    if (absDw / Math.max(absDh, 0.001) > baseAspect) {
+      // Width-dominant: height follows aspect
+      absDh = absDw / baseAspect;
+    } else {
+      // Height-dominant: width follows aspect
+      absDw = absDh * baseAspect;
     }
-
-    // Enforce minimum 50px, preserving sign so anchor stays fixed
-    rawDw = Math.sign(rawDw || 1) * Math.max(50, Math.abs(rawDw));
-    rawDh = Math.sign(rawDh || 1) * Math.max(50, Math.abs(rawDh));
+    // Enforce a minimum size, preserving aspect
+    if (absDw < 50) { absDw = 50; absDh = 50 / baseAspect; }
+    if (absDh < 50) { absDh = 50; absDw = 50 * baseAspect; }
+    rawDw = signW * absDw;
+    rawDh = signH * absDh;
 
     // New rect: anchor corner is always at bgResizeAnchorX/Y
     const newDx = bgResizeAnchorX + Math.min(0, rawDw);
@@ -1105,9 +1209,17 @@ window.addEventListener('mousemove', e => {
     // New scale derived from new width vs base width at scale=100
     const newScale = Math.round(Math.max(10, Math.min(150, (newAbsDw / bgResizeBaseW) * 100)));
 
+    // Recompute the actual drawn height from the aspect-correct scale so the
+    // anchored corner stays exactly fixed (the renderer derives height from
+    // width via the image's natural aspect, not from rawDh).
+    const drawnW = bgResizeBaseW * (newScale / 100);
+    const drawnH = bgResizeBaseH * (newScale / 100);
+    const drawnDx = bgResizeAnchorX + Math.min(0, signW * drawnW);
+    const drawnDy = bgResizeAnchorY + Math.min(0, signH * drawnH);
+
     // New center → new bgImageX/Y offset in 1080-space
-    const newCenterX = newDx + newAbsDw / 2;
-    const newCenterY = newDy + newAbsDh / 2;
+    const newCenterX = drawnDx + drawnW / 2;
+    const newCenterY = drawnDy + drawnH / 2;
     const newOffX = (newCenterX - fmt.w / 2) * (1080 / fmt.w);
     const newOffY = (newCenterY - fmt.h / 2) * (1080 / fmt.w);
 
