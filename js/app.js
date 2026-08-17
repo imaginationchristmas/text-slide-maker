@@ -590,9 +590,13 @@ function getBgImageRect(slide) {
 function hitTestBgImages(slide, mx, my) {
   const arr = getBgImages(slide);
   const fmt = EXPORT_FORMATS[previewSize];
-  // design → canvas-pixel
+  // mx is design-space X (scaled by width); my is already canvas-pixel Y
+  // (screenToDesign does not scale Y). The layer rect from getBgImageLayerRect
+  // is in canvas-pixel space, so convert only X and use my as-is. The previous
+  // code scaled Y by fmt.h/CANVAS_SIZE a second time, which threw the hit-test
+  // vertically off on portrait/story (on square it's ×1 so it went unnoticed).
   const px = mx * (fmt.w / CANVAS_SIZE);
-  const py = my * (fmt.h / CANVAS_SIZE);
+  const py = my;
   for (let i = arr.length - 1; i >= 0; i--) {
     const r = getBgImageLayerRect(slide, arr[i]);
     if (r && px >= r.dx && px <= r.dx + r.dw && py >= r.dy && py <= r.dy + r.dh) return i;
