@@ -189,6 +189,9 @@ let bgResizeAnchorX = 0, bgResizeAnchorY = 0;
 let bgResizeStartRect = null; // {dx,dy,dw,dh}
 // Base image dimensions at scale=100 for the current fit mode
 let bgResizeBaseW = 0, bgResizeBaseH = 0;
+// When true (Ctrl/Cmd held at handle grab), resize expands/contracts about the
+// image center instead of anchoring the opposite corner/edge.
+let bgResizeCenter = false;
 
 // Animation state
 let animIdx = 0;
@@ -1184,6 +1187,7 @@ document.querySelectorAll('.bg-corner-handle').forEach(handle => {
     bgResizeAnchorX = corner === 'tl' || corner === 'bl' ? dx + dw : dx;
     bgResizeAnchorY = corner === 'tl' || corner === 'tr' ? dy + dh : dy;
     bgResizeStartRect = { dx, dy, dw, dh };
+    bgResizeCenter = e.ctrlKey || e.metaKey; // hold Ctrl/Cmd to resize about center
     if (!computeBgResizeBase(slide)) { draggingBgResize = null; return; }
     e.preventDefault();
   });
@@ -1206,6 +1210,7 @@ document.querySelectorAll('.bg-edge-handle').forEach(handle => {
     bgResizeAnchorX = edge === 'l' ? dx + dw : dx;        // dragging left → right edge fixed
     bgResizeAnchorY = edge === 't' ? dy + dh : dy;        // dragging top  → bottom edge fixed
     bgResizeStartRect = { dx, dy, dw, dh };
+    bgResizeCenter = e.ctrlKey || e.metaKey; // hold Ctrl/Cmd to resize about center
     if (!computeBgResizeBase(slide)) { draggingBgResize = null; return; }
     e.preventDefault();
   });
@@ -1404,6 +1409,49 @@ window.addEventListener('mousemove', e => {
     const baseAspect = bgResizeBaseW / Math.max(bgResizeBaseH, 0.001);
     const isEdge = draggingBgResize === 't' || draggingBgResize === 'b' ||
                    draggingBgResize === 'l' || draggingBgResize === 'r';
+
+    // Center-anchored resize (Ctrl/Cmd held at grab): the image center stays
+    // fixed and the rect expands/contracts symmetrically about it. The dragged
+    // dimension is twice the mouse distance from the center; the other axis
+    // follows the aspect ratio.
+    if (bgResizeCenter) {
+      const centerX = bgResizeStartRect.dx + bgResizeStartRect.dw / 2;
+      const centerY = bgResizeStartRect.dy + bgResizeStartRect.dh / 2;
+      // Use whichever axis the mouse is furthest from center on, so both corner
+      // and edge handles feel proportional.
+      const distW = Math.abs(mouseCanvasX - centerX) * 2;
+      const distH = Math.abs(mouseCanvasY - centerY) * 2;
+      let newAbsDw, newAbsDh;
+      if (distW / Math.max(distH, 0.001) > baseAspect) {
+        newAbsDw = Math.max(50, distW);
+        newAbsDh = newAbsDw / baseAspect;
+      } else {
+        newAbsDh = Math.max(50, distH);
+        newAbsDw = newAbsDh * baseAspect;
+      }
+      const newScale = Math.round(Math.max(10, Math.min(150, (newAbsDw / bgResizeBaseW) * 100)));
+      const drawnW = bgResizeBaseW * (newScale / 100);
+      const drawnH = bgResizeBaseH * (newScale / 100);
+      const newOffX = (centerX - fmt.w / 2) * (1080 / fmt.w);
+      const newOffY = (centerY - fmt.h / 2) * (1080 / fmt.w);
+
+      const layer = getSelectedBgImage(slide);
+      if (!layer) { draggingBgResize = null; return; }
+      layer.scale = newScale;
+      const yLim = bgImageYLimit();
+      layer.x = Math.round(Math.max(-540, Math.min(540, newOffX)));
+      layer.y = Math.round(Math.max(-yLim, Math.min(yLim, newOffY)));
+
+      document.getElementById('bg-img-scale').value = newScale;
+      document.getElementById('bg-img-scale-val').textContent = newScale + '%';
+      document.getElementById('bg-img-x').value = layer.x;
+      document.getElementById('bg-img-y').value = layer.y;
+      document.getElementById('bg-img-x-val').textContent = layer.x;
+      document.getElementById('bg-img-y-val').textContent = layer.y;
+      renderCurrent();
+      updateBgSelectionBox();
+      return;
+    }
 
     if (isEdge) {
       // Edge-midpoint drag: resize along the dragged axis while the OPPOSITE
@@ -1617,6 +1665,7 @@ window.addEventListener('mousemove', e => {
 window.addEventListener('mouseup', () => {
   if (draggingBgResize) {
     draggingBgResize = null;
+    bgResizeCenter = false;
     updateBgSelectionBox();
     pushUndoDebounced();
     scheduleSave();
