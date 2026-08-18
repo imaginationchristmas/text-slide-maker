@@ -2042,6 +2042,13 @@ function selectTextBlock(i) {
   updateTextSelectionBox();
 }
 
+// Escape user-controlled text before interpolating into innerHTML (prevents
+// DOM-based XSS from text-block content or imported project files).
+function escapeHtml(s) {
+  // Numeric character references avoid literal HTML entities in source.
+  return String(s).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
+}
+
 function refreshTextList() {
   const list = document.getElementById('text-blocks-list');
   list.innerHTML = '';
@@ -2050,7 +2057,7 @@ function refreshTextList() {
     const d = document.createElement('div');
     d.className = 'text-block-item' + (i === selectedTextIdx ? ' active' : '');
     d.innerHTML = `<div class="tbi-label">Block ${i + 1}</div>
-      <div class="tbi-preview">${tb.text.replace(/\n/g, ' ') || '(empty)'}</div>
+      <div class="tbi-preview">${escapeHtml(tb.text.replace(/\n/g, ' ') || '(empty)')}</div>
       <button class="tbi-del" onclick="event.stopPropagation();deleteTextBlock(${i})" title="Delete block">✕</button>`;
     d.onclick = () => selectTextBlock(i);
     list.appendChild(d);
@@ -3691,7 +3698,7 @@ function updateBulkPreview() {
     const chip = document.createElement('div');
     chip.className = 'bulk-chip';
     chip.innerHTML = `<span class="bulk-chip-num">${i + 1}</span>
-      <span class="bulk-chip-text">${preview || '(empty)'}</span>`;
+      <span class="bulk-chip-text">${escapeHtml(preview || '(empty)')}</span>`;
     chips.appendChild(chip);
   });
 }
