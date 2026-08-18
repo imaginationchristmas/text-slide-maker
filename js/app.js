@@ -1338,6 +1338,7 @@ overlay.addEventListener('mousedown', e => {
         overlay.style.cursor = 'grab';
       }
     }
+    setBgType('image'); // reveal the image adjustment controls for the selection
     refreshTextPanel();
     refreshBgImageList();
     syncBgImageControls();
@@ -2363,6 +2364,7 @@ function selectBgImage(idx) {
   const arr = getBgImages(slides[currentSlideIdx]);
   if (idx < 0 || idx >= arr.length) return;
   selectSingleItem('image', idx);
+  setBgType('image'); // reveal the image adjustment controls for the selection
   refreshBgImageList();
   syncBgImageControls();
   refreshTextPanel();
