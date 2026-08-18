@@ -3689,7 +3689,7 @@ async function init() {
   const savedSkin = localStorage.getItem('sm-skin');
   const firstVisit = !savedSkin;
   applySkin(savedSkin || 'modern');
-  applyTheme(localStorage.getItem('sm-theme') || 'dark');
+  applyTheme(localStorage.getItem('sm-theme') || 'light');
 
   // Load fonts first
   await loadFonts();
