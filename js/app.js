@@ -2394,6 +2394,23 @@ function updateBgImageOffset() {
   renderCurrent();
 }
 
+// One-click image positioning. 'center' zeroes both pan axes; 'center-h' /
+// 'center-v' zero only the X or Y pan (all keep zoom). 'zoom' resets scale to
+// 100% (keeping pan). Syncs the sliders and re-renders.
+function snapBgImage(action) {
+  if (!slides.length) return;
+  const layer = getSelectedBgImage(slides[currentSlideIdx]);
+  if (!layer) return;
+  pushUndo();
+  if (action === 'center') { layer.x = 0; layer.y = 0; }
+  else if (action === 'center-h') { layer.x = 0; }
+  else if (action === 'center-v') { layer.y = 0; }
+  else if (action === 'zoom') { layer.scale = 100; }
+  syncBgImageControls();
+  renderCurrent();
+  scheduleSave();
+}
+
 function updateBgImgColor() {
   if (!slides.length) return;
   pushUndoDebounced();

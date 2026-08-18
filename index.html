@@ -151,6 +151,12 @@
                 title="Scale the background image up or down">
               <span class="small-label" id="bg-img-scale-val" style="width:36px;text-align:right;">100%</span>
             </div>
+            <div class="snap-btns" style="margin-top:6px;">
+              <button class="snap-btn" onclick="snapBgImage('center')" title="Center the image horizontally and vertically (keeps zoom)">↔↕ Center</button>
+              <button class="snap-btn" onclick="snapBgImage('center-h')" title="Center horizontally only (keeps vertical position and zoom)">↔ Center H</button>
+              <button class="snap-btn" onclick="snapBgImage('center-v')" title="Center vertically only (keeps horizontal position and zoom)">↕ Center V</button>
+              <button class="snap-btn" onclick="snapBgImage('zoom')" title="Reset zoom to 100% (keeps position)">Reset Zoom</button>
+            </div>
             <div class="ctrl-row" style="margin-top:4px;">
               <input type="color" id="bg-img-bgcolor" value="#1a1a2e" oninput="updateBgImgColor()" title="Background color shown behind the image">
               <button class="tb-btn eyedropper-btn" id="bg-eyedropper-btn" onclick="startBgEyedropper()" title="Pick a color from the image on the canvas">🖉 Pick</button>
