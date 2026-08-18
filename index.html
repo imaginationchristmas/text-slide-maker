@@ -48,8 +48,8 @@
     <div id="slides-header">
       <span>Slides</span>
       <span id="sel-count" title="Slides selected for bulk delete"></span>
-      <button id="bulk-del-btn" onclick="bulkDeleteSlides()" title="Delete selected slides"
-        style="display:none;background:rgba(220,50,50,0.25);color:#ff6b6b;font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px;border:1px solid rgba(220,50,50,0.4);cursor:pointer;white-space:nowrap;line-height:1.4;">✕ Delete</button>
+      <button id="bulk-del-btn" class="bulk-del-btn" onclick="bulkDeleteSlides()" title="Delete selected slides"
+        style="display:none;">✕ Delete</button>
       <button class="add-slide-btn" onclick="addSlide()" title="Add slide">+</button>
     </div>
     <div id="slides-list"></div>
@@ -523,6 +523,18 @@ And this becomes slide three</div>
         <li><b>Width:</b> drag the box's right-edge handle, or use the <b>W</b> slider. Long words wrap automatically.</li>
         <li><b>Position:</b> use the snap buttons (Left / Center / Right / Top / Bottom) to align text to the canvas edges.</li>
         <li><b>Multiple blocks:</b> add more text blocks per slide from the Text section; each is positioned independently.</li>
+        <li><b>Multi-select:</b> hold <kbd>⇧ Shift</kbd> and click to select several text blocks and/or images, then drag to move them together or press <kbd>Del</kbd> to delete them all.</li>
+      </ul>
+    </div>
+
+    <div class="help-section">
+      <div class="help-heading">Working with images</div>
+      <ul class="help-list">
+        <li><b>Select:</b> click an image on the canvas — the image controls open on the right automatically.</li>
+        <li><b>Move:</b> click an already-selected image and drag, or use the <b>X</b> / <b>Y</b> sliders.</li>
+        <li><b>Resize:</b> drag a corner or edge handle. Hold <kbd>⌘/Ctrl</kbd> while dragging to grow/shrink the image around its center.</li>
+        <li><b>Center:</b> use the <b>Center</b>, <b>Center H</b>, and <b>Center V</b> buttons to center on both axes or just one — without disturbing the other. <b>Reset Zoom</b> returns to 100%.</li>
+        <li><b>Background color:</b> click <b>🖉 Pick</b>, then click any spot on the canvas to sample that color as the slide background. Press <kbd>Esc</kbd> to cancel.</li>
       </ul>
     </div>
 
@@ -533,7 +545,10 @@ And this becomes slide three</div>
         <div><kbd>↑</kbd><kbd>↓</kbd><span>Previous / next slide</span></div>
         <div><kbd>D</kbd><span>Duplicate slide</span></div>
         <div><kbd>N</kbd><span>New slide</span></div>
-        <div><kbd>Del</kbd><span>Delete slide</span></div>
+        <div><kbd>⇧</kbd>+click<span>Multi-select items</span></div>
+        <div><kbd>Del</kbd><span>Delete selected item(s); deletes the slide only when nothing is selected</span></div>
+        <div><kbd>⌘/Ctrl</kbd>+drag<span>Resize image around its center</span></div>
+        <div><kbd>Esc</kbd><span>Cancel eyedropper / close dialogs</span></div>
         <div><kbd>⌘/Ctrl</kbd>+<kbd>Z</kbd><span>Undo</span></div>
         <div><kbd>⌘/Ctrl</kbd>+<kbd>⇧</kbd>+<kbd>Z</kbd><span>Redo</span></div>
       </div>
