@@ -708,6 +708,15 @@ input[type=color] {
 }
 .apply-all-btn:hover { background: rgba(174,77,250,0.18); border-color: var(--accent2); }
 
+/* Eyedropper "Pick" button — sits inline next to the image bg color picker */
+.eyedropper-btn { height: 26px; padding: 0 10px; font-size: 12px; white-space: nowrap; }
+.eyedropper-btn.armed {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
 /* Text blocks list */
 #text-blocks-list { display: flex; flex-direction: column; gap: 5px; }
 .text-block-item {

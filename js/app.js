@@ -645,7 +645,9 @@ function selectFontFromPicker(family) {
 // ─── RENDERING ────────────────────────────────────────────────────────────────
 
 const mainCanvas = document.getElementById('main-canvas');
-const ctx = mainCanvas.getContext('2d');
+// willReadFrequently lets the eyedropper sample pixels via getImageData without
+// the browser forcing the canvas onto the GPU (which would make reads slow).
+const ctx = mainCanvas.getContext('2d', { willReadFrequently: true });
 
 function renderSlideToSize(slide, targetW, targetH) {
   const off = document.createElement('canvas');
@@ -710,12 +712,18 @@ function renderSlideToSize(slide, targetW, targetH) {
     }
   });
 
-  // Text blocks — X scales with canvas width; Y is absolute (same pixel position across formats)
+  // Text blocks — X scales with canvas width. Y is re-anchored around the
+  // canvas center so text and images (which are also center-anchored) keep
+  // their relative spacing across formats. A block's offset from the 1080
+  // design center is preserved, then re-applied around the actual canvas
+  // center (targetH/2). centerOffset = (targetH - CANVAS_SIZE) / 2, which is 0
+  // for square and grows for portrait/story.
+  const centerOffset = (targetH - CANVAS_SIZE) / 2;
   slide.textBlocks.forEach(tb => {
     const scaled = {
       ...tb,
       x: tb.x * scaleX,
-      y: tb.y,           // absolute Y — no vertical scaling
+      y: tb.y + centerOffset,
       width: tb.width * scaleX,
       fontSize: tb.fontSize * scaleX,
     };
@@ -963,13 +971,12 @@ function getBgImageRect(slide) {
 function hitTestBgImages(slide, mx, my) {
   const arr = getBgImages(slide);
   const fmt = EXPORT_FORMATS[previewSize];
-  // mx is design-space X (scaled by width); my is already canvas-pixel Y
-  // (screenToDesign does not scale Y). The layer rect from getBgImageLayerRect
-  // is in canvas-pixel space, so convert only X and use my as-is. The previous
-  // code scaled Y by fmt.h/CANVAS_SIZE a second time, which threw the hit-test
-  // vertically off on portrait/story (on square it's ×1 so it went unnoticed).
+  // mx is design-space X (scaled by width). my is the text-anchored design Y
+  // from screenToDesign (which subtracts textYOffset()). The image layer rect
+  // from getBgImageLayerRect is in absolute canvas-pixel space, so add the
+  // offset back to my to compare like-for-like. Convert only X by width scale.
   const px = mx * (fmt.w / CANVAS_SIZE);
-  const py = my;
+  const py = my + textYOffset();
   for (let i = arr.length - 1; i >= 0; i--) {
     const r = getBgImageLayerRect(slide, arr[i]);
     if (r && px >= r.dx && px <= r.dx + r.dw && py >= r.dy && py <= r.dy + r.dh) return i;
@@ -1026,7 +1033,7 @@ function updateTextSelectionBox() {
   }
   box.style.display = 'block';
   box.style.left   = (leftX * scaleX * scale) + 'px';
-  box.style.top    = (tb.y * scale) + 'px';
+  box.style.top    = ((tb.y + textYOffset()) * scale) + 'px';
   box.style.width  = (boxW * scaleX * scale) + 'px';
   box.style.height = (h * scale) + 'px';
   // The width handle is a CSS-positioned child at the box's right edge.
@@ -1045,7 +1052,7 @@ function getTextBlockRect(slide, idx) {
   let leftX = tb.x;
   if (tb.align === 'right')       leftX = tb.x + tb.width - textW;
   else if (tb.align === 'center') leftX = tb.x + (tb.width - textW) / 2;
-  return { dx: leftX * scaleX, dy: tb.y, dw: textW * scaleX, dh: h };
+  return { dx: leftX * scaleX, dy: tb.y + textYOffset(), dw: textW * scaleX, dh: h };
 }
 
 // Render one dashed outline per selected item when multi-selecting. With a
@@ -1115,16 +1122,27 @@ function updateCanvasScale() {
 
 // ─── COORDINATE CONVERSION ────────────────────────────────────────────────────
 
+// Vertical offset applied to text blocks on the canvas. Text is re-anchored
+// around the canvas center (matching how images are anchored) so text and
+// images keep their relative spacing across formats. 0 for square; grows for
+// portrait/story. This is the single source of truth — rendering, hit-testing,
+// selection boxes, and coordinate conversion all use it.
+function textYOffset() {
+  const fmt = EXPORT_FORMATS[previewSize];
+  return (fmt.h - CANVAS_SIZE) / 2;
+}
+
 function screenToDesign(ex, ey) {
   const fmt = EXPORT_FORMATS[previewSize];
   const rect = mainCanvas.getBoundingClientRect();
   const px = (ex - rect.left)  / scale;
   const py = (ey - rect.top)   / scale;
   const scaleX = fmt.w / CANVAS_SIZE;
-  // Y is absolute (no vertical scaling) — just convert from canvas pixels to design pixels
+  // Subtract the text Y offset so the returned design-Y matches the block's
+  // stored tb.y (which is center-anchored, not absolute canvas Y).
   return {
     x: px / scaleX,
-    y: py   // canvas Y == design Y
+    y: py - textYOffset()
   };
 }
 
@@ -1244,6 +1262,14 @@ if (textWidthHandle) {
 
 overlay.addEventListener('mousedown', e => {
   if (!slides.length) return;
+  // Eyedropper armed → this click samples a color instead of selecting/dragging.
+  if (eyedropperActive) {
+    e.preventDefault();
+    e.stopPropagation();
+    pickBgColorAt(e.clientX, e.clientY);
+    cancelBgEyedropper();
+    return;
+  }
   // Corner/edge resize handles have their own handler
   if (e.target.classList.contains('bg-corner-handle')) return;
   if (e.target.classList.contains('bg-edge-handle')) return;
@@ -1381,6 +1407,8 @@ overlay.addEventListener('dblclick', e => {
 overlay.addEventListener('mousemove', e => {
   if (dragging || draggingBg || draggingBgResize || draggingTextWidth || draggingGroup) return;
   if (!slides.length) return;
+  // Keep the crosshair while the eyedropper is armed.
+  if (eyedropperActive) { overlay.style.cursor = 'crosshair'; return; }
   const slide = slides[currentSlideIdx];
   const { x: mx, y: my } = screenToDesign(e.clientX, e.clientY);
   const hitIdx = hitTestTextBlocks(slide, mx, my);
@@ -2194,12 +2222,15 @@ function snapPos(dir) {
   if (dir === 'left')     tb.x = pad - offL;
   if (dir === 'right')    tb.x = CANVAS_SIZE - pad - offL - textW;
   if (dir === 'center-h') tb.x = (CANVAS_SIZE - textW) / 2 - offL;
-  if (dir === 'top')      tb.y = pad;
+  // tb.y is center-anchored (rendering adds textYOffset()), so subtract it to
+  // convert an absolute canvas-Y target into the stored design-Y value.
+  const yOff = textYOffset();
+  if (dir === 'top')      tb.y = pad - yOff;
   if (dir === 'bottom') {
-    tb.y = canvasH - textBlockHeight(tb) - pad;
+    tb.y = canvasH - textBlockHeight(tb) - pad - yOff;
   }
   if (dir === 'center-v') {
-    tb.y = (canvasH - textBlockHeight(tb)) / 2;
+    tb.y = (canvasH - textBlockHeight(tb)) / 2 - yOff;
   }
   document.getElementById('pos-x').value = Math.round(tb.x);
   document.getElementById('pos-y').value = Math.round(tb.y);
@@ -2368,6 +2399,49 @@ function updateBgImgColor() {
   pushUndoDebounced();
   slides[currentSlideIdx].bgColor = document.getElementById('bg-img-bgcolor').value;
   renderCurrent();
+}
+
+// ─── EYEDROPPER (pick a color from the canvas) ────────────────────────────────
+// Clicking "Pick" arms the dropper; the next click on the canvas samples the
+// rendered pixel under the cursor and applies it as the slide background color.
+// Esc cancels. The sampled color is applied live (no extra confirm step).
+let eyedropperActive = false;
+
+function startBgEyedropper() {
+  if (!slides.length) return;
+  eyedropperActive = true;
+  overlay.style.cursor = 'crosshair';
+  document.getElementById('bg-eyedropper-btn').classList.add('armed');
+}
+
+function cancelBgEyedropper() {
+  if (!eyedropperActive) return;
+  eyedropperActive = false;
+  overlay.style.cursor = 'default';
+  const btn = document.getElementById('bg-eyedropper-btn');
+  if (btn) btn.classList.remove('armed');
+}
+
+// Sample the rendered canvas pixel at the given client coords and apply it as
+// the background color. Returns true on success.
+function pickBgColorAt(clientX, clientY) {
+  const rect = mainCanvas.getBoundingClientRect();
+  // Map screen px → canvas px (canvas backing store, not the scaled display).
+  const cx = Math.round((clientX - rect.left) / scale);
+  const cy = Math.round((clientY - rect.top)  / scale);
+  if (cx < 0 || cy < 0 || cx >= mainCanvas.width || cy >= mainCanvas.height) return false;
+  const d = ctx.getImageData(cx, cy, 1, 1).data;
+  const hex = '#' + [d[0], d[1], d[2]]
+    .map(v => v.toString(16).padStart(2, '0')).join('');
+  pushUndoDebounced();
+  slides[currentSlideIdx].bgColor = hex;
+  document.getElementById('bg-img-bgcolor').value = hex;
+  // Keep the solid-tab picker in sync too so the color is consistent everywhere.
+  const solidPicker = document.getElementById('bg-color');
+  if (solidPicker) solidPicker.value = hex;
+  renderCurrent();
+  scheduleSave();
+  return true;
 }
 
 // Rebuild the thumbnail list of image layers in the Image tab.
@@ -3668,6 +3742,11 @@ document.addEventListener('dblclick', e => {
 });
 
 document.addEventListener('keydown', e => {
+  // Esc cancels the eyedropper if it's armed
+  if (e.key === 'Escape' && eyedropperActive) {
+    cancelBgEyedropper();
+    return;
+  }
   // Esc closes the help modal
   if (e.key === 'Escape' && document.getElementById('help-modal').classList.contains('show')) {
     closeHelp();
