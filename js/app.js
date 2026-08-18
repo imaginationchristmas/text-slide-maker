@@ -1926,6 +1926,37 @@ function deleteTextBlock(i) {
   renderCurrent();
 }
 
+// Delete every currently-selected canvas item (text blocks and/or image
+// layers) in one undoable action. Handles multi-select by removing indices in
+// descending order within each type so earlier splices don't shift later ones.
+// Returns true if anything was deleted.
+function deleteSelectedItems() {
+  if (!slides.length || !selectedItems.length) return false;
+  const slide = slides[currentSlideIdx];
+  const textIdxs = selectedItems.filter(it => it.type === 'text').map(it => it.idx);
+  const imgIdxs  = selectedItems.filter(it => it.type === 'image').map(it => it.idx);
+  if (!textIdxs.length && !imgIdxs.length) return false;
+
+  pushUndo();
+  // Descending order so splicing one entry doesn't shift the indices of the rest.
+  textIdxs.sort((a, b) => b - a).forEach(i => slide.textBlocks.splice(i, 1));
+  if (imgIdxs.length) {
+    const arr = getBgImages(slide);
+    imgIdxs.sort((a, b) => b - a).forEach(i => { if (i >= 0 && i < arr.length) arr.splice(i, 1); });
+  }
+
+  clearSelection();
+  refreshTextList();
+  refreshTextPanel();
+  refreshBgImageList();
+  syncBgImageControls();
+  updateTextSelectionBox();
+  updateBgSelectionBox();
+  renderCurrent();
+  scheduleSave();
+  return true;
+}
+
 function selectTextBlock(i) {
   selectSingleItem('text', i);
   refreshTextList();
@@ -3621,7 +3652,10 @@ document.addEventListener('keydown', e => {
     }
   } else if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
-    if (slides.length > 1) deleteSlide(currentSlideIdx);
+    // Delete the selected canvas item(s) if there are any; only remove the
+    // whole slide when nothing is selected.
+    if (selectedItems.length) deleteSelectedItems();
+    else if (slides.length > 1) deleteSlide(currentSlideIdx);
   } else if (e.key === 'd' || e.key === 'D') {
     duplicateSlide();
     showKbHint();
